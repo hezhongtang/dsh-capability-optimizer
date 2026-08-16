@@ -142,6 +142,8 @@ Options:
   --no-session-persistence        Do not persist the session (--print only)
   --tools <tools...>              Specify the list of available tools from the
                                   built-in set
+  --setting-sources <sources>     Comma-separated list of setting sources to load
+                                  (user, project, local)
   --allowedTools, --allowed-tools <tools...>
                                   Tools allowed without prompting
   --disallowedTools, --disallowed-tools <tools...>

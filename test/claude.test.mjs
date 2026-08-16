@@ -70,6 +70,7 @@ Options:
   --allowedTools, --allowed-tools <tools...>   Tools allowed without prompting
   --disallowedTools, --disallowed-tools <tools...>  Tools denied
   --tools <tools...>              Specify the list of available tools
+  --setting-sources <sources>     Comma-separated list of setting sources to load (user, project, local)
   -h, --help                      Display help for command
 `
 
@@ -113,7 +114,7 @@ test("the stub's default help matches the installed CLI's flag surface", async (
   // CLI has, every "safe defaults are applied" assertion silently goes vacuous.
   const capabilities = await probeCliCapabilities(fakeClaudePath)
   assert.deepEqual(capabilities, {
-    tools: true, noSessionPersistence: true, maxBudgetUsd: true, probed: true,
+    tools: true, noSessionPersistence: true, maxBudgetUsd: true, settingSources: true, probed: true,
   })
 })
 
@@ -143,7 +144,43 @@ Options:
   assert.ok(!record.argv.includes('--tools'))
   assert.ok(!record.argv.includes('--no-session-persistence'))
   assert.ok(!record.argv.includes('--max-budget-usd'))
+  assert.ok(!record.argv.includes('--setting-sources'))
   assert.equal(value.meta.tools, undefined)
+})
+
+test('an advertised --setting-sources flag loads user settings only, never project', async () => {
+  freshProbe()
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: MODERN_HELP }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  const flag = record.argv.indexOf('--setting-sources')
+  assert.notEqual(flag, -1, 'a CLI that advertises --setting-sources must receive it')
+  const sources = record.argv[flag + 1]
+  assert.equal(typeof sources, 'string')
+  assert.ok(!sources.split(',').map((part) => part.trim()).includes('project'),
+    `source list must not load project permissions, got ${sources}`)
+  assert.ok(!record.argv.includes('--settings'), 'must not pass a project settings file')
+})
+
+test('an unadvertised --setting-sources flag is skipped and the run still succeeds', async () => {
+  freshProbe()
+  const oldHelp = `Usage: claude [options] [prompt]
+
+Options:
+  -p, --print               Print response and exit
+  --output-format <format>  Output format
+  --append-system-prompt <prompt>  Append a system prompt
+  --model <model>           Model for the session
+  -h, --help                Display help
+`
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: oldHelp }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true, 'an old CLI must still produce an answer')
+  assert.ok(!record.argv.includes('--setting-sources'))
 })
 
 test('the capability probe is cached per CLI path', async () => {

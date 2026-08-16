@@ -22,16 +22,19 @@ a CLI new enough to advertise `--tools` (2.1.233 does) the hole is closed. On an
 older CLI the feature probe suppresses the flag and the hole is open.
 
 **Lever:** `--setting-sources <sources>` exists on 2.1.233 ("Comma-separated list of
-setting sources to load (user, project, local)") — verified present. One flag, root
-cause, nothing to keep in sync. Feature-detect it the same way as `--tools`.
+setting sources to load (user, project, local)") — verified present. Applied when
+the installed CLI advertises the flag: the runner passes `--setting-sources user`,
+which excludes `project` and `local` (the files that can pre-approve tools in the
+repo being consulted). An older CLI that does not advertise the flag skips it.
 
 **Explicitly rejected alternative:** a `--disallowedTools` denylist. It inverts the
 failure mode — every tool a future CLI ships is permitted until someone remembers to
 extend the list, so it fails *open*. `--tools` is an allowlist and is self-maintaining.
 
-**Verification status:** the existence of the flags is confirmed against the installed
-CLI. The settings-vs-flag *precedence* (deny-over-allow ordering) is documented Claude
-Code behaviour but was **not** empirically tested here. Test it before relying on it.
+**Verification status:** the flag is feature-detected and passed in argv when
+advertised. The settings-vs-flag *precedence* (deny-over-allow ordering) is
+documented Claude Code behaviour but was **not** empirically tested here. Test it
+against a real CLI before treating the hole as closed on every install.
 
 ## S2 — `maxBudgetUsd` reaches the CLI but nothing else
 
