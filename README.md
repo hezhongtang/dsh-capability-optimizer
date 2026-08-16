@@ -11,7 +11,7 @@
   <img src="assets/screenshot-zh.png" width="640" alt="The Expert Consult settings workspace: one tab per harness CLI (Claude Code live, six reserved), general defaults with model / thinking-effort / fallback, the role roster, and a live connectivity test." />
 </p>
 
-English | [中文](README.zh.md)
+English | [中文](README.zh-cn.md)
 
 ## Why this exists
 
