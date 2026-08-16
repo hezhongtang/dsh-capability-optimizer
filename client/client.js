@@ -189,7 +189,9 @@ const CSS = [
   '.dco-row{display:flex;align-items:center;gap:8px}',
   '.dco-roles{display:flex;flex-direction:column;gap:8px}',
   '.dco-role{border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.25));border-radius:9px;padding:9px 12px;display:flex;flex-direction:column;gap:5px}',
-  '.dco-role-top{display:flex;align-items:center;gap:8px}',
+  '.dco-role-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap}',
+  '.dco-role-meta{display:flex;flex-wrap:wrap;gap:6px}',
+  '.dco-role-top+.dco-role-meta{margin-top:-2px}',
   '.dco-dot{width:8px;height:8px;border-radius:50%;flex:none;background:var(--dsw-alias-success,#2ea44f)}',
   '.dco-dot.off{background:var(--dsw-alias-danger,rgba(200,60,60,.8));opacity:.5}',
   '.dco-role-name{font-family:var(--dsw-alias-font-mono,monospace);font-size:12.5px;font-weight:600}',
@@ -534,20 +536,24 @@ function Section({ t }) {
         h('span', { style: { marginLeft: 'auto' } },
           h('button', { className: 'dco-btn', onClick: () => setEditing({ role: { name: '', label: '', description: '', systemPrompt: '', model: '', fallbackModel: '', enabled: true }, isNew: true }) }, `+ ${t('addRole')}`))),
       h('div', { className: 'dco-roles' },
-        draft.roles.map((role, index) => h('div', { className: 'dco-role', key: role.name || index },
-          h('div', { className: 'dco-role-top' },
-            h('span', { className: `dco-dot${role.enabled === false ? ' off' : ''}` }),
-            h('span', { className: 'dco-role-name' }, role.name),
-            role.label ? h('span', { style: { fontSize: '12px', opacity: .7 } }, role.label) : null,
-            BUILTIN_NAMES.has(role.name) ? h('span', { className: 'dco-pill tag' }, t('builtin')) : h('span', { className: 'dco-pill' }, t('custom')),
-            role.model ? h('span', { className: 'dco-pill' }, `${t('roleModelPill')}: ${role.model}`) : null,
-            role.fallbackModel ? h('span', { className: 'dco-pill' }, `${t('roleFallbackPill')}: ${role.fallbackModel}`) : null,
-            role.effort ? h('span', { className: 'dco-pill tag' }, `${t('effort')}: ${role.effort}`) : null,
-            h('span', { style: { marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' } },
-              h(Switch, { on: role.enabled !== false, title: t('enabled'), onToggle: () => setRole(index, { enabled: role.enabled === false }) }),
-              h('button', { className: 'dco-btn', onClick: () => setEditing({ role, isNew: false }) }, t('editRole')),
-              h('button', { className: 'dco-btn danger', onClick: () => { if (window.confirm(t('confirmDelete'))) setDraft((prev) => ({ ...prev, roles: prev.roles.filter((_, i) => i !== index) })) } }, t('delete')))),
-          h('div', { className: 'dco-role-desc' }, role.description ?? ''))))),
+        draft.roles.map((role, index) => {
+          const meta = []
+          if (role.model) meta.push(h('span', { key: 'm', className: 'dco-pill' }, `${t('roleModelPill')}: ${role.model}`))
+          if (role.fallbackModel) meta.push(h('span', { key: 'f', className: 'dco-pill' }, `${t('roleFallbackPill')}: ${role.fallbackModel}`))
+          if (role.effort) meta.push(h('span', { key: 'e', className: 'dco-pill' }, `${t('effort')}: ${role.effort}`))
+          return h('div', { className: 'dco-role', key: role.name || index },
+            h('div', { className: 'dco-role-top' },
+              h('span', { className: `dco-dot${role.enabled === false ? ' off' : ''}` }),
+              h('span', { className: 'dco-role-name' }, role.name),
+              role.label ? h('span', { style: { fontSize: '12px', opacity: .7 } }, role.label) : null,
+              BUILTIN_NAMES.has(role.name) ? h('span', { className: 'dco-pill tag' }, t('builtin')) : h('span', { className: 'dco-pill' }, t('custom')),
+              h('span', { style: { marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' } },
+                h(Switch, { on: role.enabled !== false, title: t('enabled'), onToggle: () => setRole(index, { enabled: role.enabled === false }) }),
+                h('button', { className: 'dco-btn', onClick: () => setEditing({ role, isNew: false }) }, t('editRole')),
+                h('button', { className: 'dco-btn danger', onClick: () => { if (window.confirm(t('confirmDelete'))) setDraft((prev) => ({ ...prev, roles: prev.roles.filter((_, i) => i !== index) })) } }, t('delete')))),
+            meta.length > 0 ? h('div', { className: 'dco-role-meta' }, meta) : null,
+            h('div', { className: 'dco-role-desc' }, role.description ?? ''))
+        })))),
 
     h(TestPanel, { t, roles: draft.roles }),
 
@@ -567,7 +573,7 @@ function Section({ t }) {
         setDraft((prev) => ({ ...prev, roles }))
         setEditing(null)
       },
-    })))
+    }))
 }
 
 exports.name = 'dsh-capability-optimizer'
