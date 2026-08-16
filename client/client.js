@@ -174,7 +174,7 @@ const en = {
   custom: 'custom',
   builtinDescAdvisor: 'Pragmatic senior-engineer counsel: trade-offs, risks, and what to do next. Pick for direction and decision points.',
   builtinDescReviewer: 'Critical reviewer of code, diffs, or plans: bugs, edge cases, security, missing tests. Pick before declaring work done.',
-  builtinDescDesigner: 'Architect for structure and interfaces: module boundaries, API shape, data flow, alternatives with trade-offs. Pick before significant new code.',
+  builtinDescDesigner: 'Architect for structure and interfaces: module boundaries, API shape, data flow, alternatives with trade-offs. Auto-nudge arrives after the first write of a turn, on the next step.',
   delete: 'Delete',
   confirmDelete: 'Delete this role?',
   cancel: 'Cancel',

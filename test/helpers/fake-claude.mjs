@@ -115,7 +115,7 @@ function emit() {
 }
 
 function doc(overrides) {
-  return {
+  const out = {
     type: 'result',
     session_id: 'fake-session-0001',
     num_turns: 2,
@@ -123,6 +123,15 @@ function doc(overrides) {
     total_cost_usd: 0.0042,
     ...overrides,
   }
+  const structured = process.env.FAKE_CLAUDE_STRUCTURED
+  if (structured !== undefined && structured.length > 0 && out.structured_output === undefined) {
+    try {
+      out.structured_output = JSON.parse(structured)
+    } catch {
+      out.structured_output = structured
+    }
+  }
+  return out
 }
 
 // Function declaration, not a const: the `--help` branch above runs before

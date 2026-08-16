@@ -67,7 +67,7 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 
 聊天输入条（权限控件那一行）带有专家咨询开关：按会话勾选角色，host 主动把它们纳入工作流——不用提示、不用反复交代。
 
-- **政策区块**：每次模型请求都携带简短的政策块，点名已勾选角色及各自适用时机（advisor 决策点、reviewer 宣称完成前、designer 动重要代码前）。
+- **政策区块**：每次模型请求都携带简短的政策块，点名已勾选角色及各自适用时机（advisor 决策点、reviewer 宣称完成前、designer 本轮首次写文件之后的下一步）。自动咨询模式为 `off | remind | required`（默认 `remind`）。
 - **生命周期催办**：一轮内的首次文件写入触发 designer 锚点（催办随该轮下一步注入）；改动过文件、即将收尾却未经 reviewer 把关的一轮，会被续跑一步先去咨询。
 - **预算**：`capPerRole`（默认 3）按角色按会话统计真实 `consult_*` 调用——催办与模型自主调用共用额度；触顶后政策撤回承诺、锚点静默。
 - **软约束（有意为之）**：催办保证指令送达，不保证工具调用——dsh 没有强制调用 API；模型若拒绝须一行说明理由。
@@ -99,7 +99,7 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 | `maxBudgetUsd` | `0` | 单次咨询美元上限（CLI 支持时传 `--max-budget-usd`）。`0` 表示不设上限。 |
 | `extraArgs` | `[]` | 附加 CLI 参数，走允许清单。会扩大权限、破坏 JSON 协议或与类型化设置重复的标志会被丢弃并回报。 |
 | `roles` | 内置 | 自定义角色：新增，或复用内置角色名覆盖之。 |
-| `autoConsult` | `{ enabled: [], capPerRole: 3 }` | 自动咨询的默认勾选集（角色键如 `claude-code:reviewer`）与每角色每会话预算。 |
+| `autoConsult` | `{ enabled: [], capPerRole: 3, mode: 'remind' }` | 默认勾选集（角色键如 `claude-code:reviewer`）、每角色每会话预算，以及触发模式（`off \| remind \| required`）。 |
 
 示例——安全向自定义角色：
 

@@ -71,6 +71,7 @@ Options:
   --disallowedTools, --disallowed-tools <tools...>  Tools denied
   --tools <tools...>              Specify the list of available tools
   --setting-sources <sources>     Comma-separated list of setting sources to load (user, project, local)
+  --json-schema <schema>          Validate output against a JSON schema
   -h, --help                      Display help for command
 `
 
@@ -114,7 +115,7 @@ test("the stub's default help matches the installed CLI's flag surface", async (
   // CLI has, every "safe defaults are applied" assertion silently goes vacuous.
   const capabilities = await probeCliCapabilities(fakeClaudePath)
   assert.deepEqual(capabilities, {
-    tools: true, noSessionPersistence: true, maxBudgetUsd: true, settingSources: true, probed: true,
+    tools: true, noSessionPersistence: true, maxBudgetUsd: true, settingSources: true, jsonSchema: true, probed: true,
   })
 })
 
@@ -181,6 +182,30 @@ Options:
 
   assert.equal(value.ok, true, 'an old CLI must still produce an answer')
   assert.ok(!record.argv.includes('--setting-sources'))
+})
+
+test('an advertised --json-schema flag is passed on the shipped runner', async () => {
+  freshProbe()
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: MODERN_HELP }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  const flag = record.argv.indexOf('--json-schema')
+  assert.notEqual(flag, -1, 'a CLI that advertises --json-schema must receive it')
+  const schema = JSON.parse(record.argv[flag + 1])
+  assert.equal(schema.properties.verdict.enum.includes('revise'), true)
+  assert.equal(schema.properties.verdict.enum.includes('pass'), true)
+})
+
+test('an unadvertised --json-schema flag is skipped and the run still succeeds', async () => {
+  freshProbe()
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: 'Options:\n  -p, --print\n  -h, --help\n' }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  assert.ok(!record.argv.includes('--json-schema'))
 })
 
 test('the capability probe is cached per CLI path', async () => {

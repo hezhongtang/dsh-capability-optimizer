@@ -67,7 +67,7 @@ The agent picks the role, packs the material into context, and calls `consult_ex
 
 The composer toolbar (the permissions control's row) carries an Expert Consult toggle: check roles for this session and the host proactively works them into the loop — no prompting, no re-explaining.
 
-- **Policy section**: every model request carries a short policy block naming the checked roles and when each applies (advisor at decision points, reviewer before declaring work done, designer before significant new code).
+- **Policy section**: every model request carries a short policy block naming the checked roles and when each applies (advisor at decision points, reviewer before declaring work done, designer after the first file write of a turn, on the next step). Auto-consult mode is `off | remind | required` (default `remind`).
 - **Lifecycle nudges**: the first file write of a turn arms the designer anchor (the nudge rides the next step of that turn); a turn that changed files and is about to finish without a reviewer pass is steered one more step to consult first.
 - **Budget**: `capPerRole` (default 3) counts real `consult_*` calls per role per session — nudges and the model's own discretionary calls share it. At the cap the promise drops out of the policy text and the anchors go quiet.
 - **Soft by design**: a nudge guarantees the instruction is delivered, never the tool call — dsh has no forced-call API. A model that declines must state the reason in one line.
@@ -99,7 +99,7 @@ The row's config still works as the base layer (settings file wins once saved):
 | `maxBudgetUsd` | `0` | Per-run dollar cap (`--max-budget-usd`) when the CLI supports it. `0` means no cap. |
 | `extraArgs` | `[]` | Extra CLI args, allowlisted. Flags that widen permissions, break the JSON protocol, or duplicate typed settings are dropped and reported. |
 | `roles` | built-ins | Custom roles: add new ones, or override a built-in by reusing its name. |
-| `autoConsult` | `{ enabled: [], capPerRole: 3 }` | Default checked set for the auto-consult toggle (role keys like `claude-code:reviewer`) and the per-role per-session budget. |
+| `autoConsult` | `{ enabled: [], capPerRole: 3, mode: 'remind' }` | Default checked set (role keys like `claude-code:reviewer`), per-role per-session budget, and trigger mode (`off \| remind \| required`). |
 
 Example — a security-focused custom role:
 
