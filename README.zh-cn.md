@@ -96,7 +96,8 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 | `timeoutMs` | `300000` | 单次咨询墙钟上限。 |
 | `maxTurns` | `8` | CLI 内部代理轮数上限。 |
 | `maxPanelRoles` | `4` | `consult_panel` 单次角色数上限。 |
-| `extraArgs` | `[]` | 传给 CLI 的原始附加参数。 |
+| `maxBudgetUsd` | `0` | 单次咨询美元上限（CLI 支持时传 `--max-budget-usd`）。`0` 表示不设上限。 |
+| `extraArgs` | `[]` | 附加 CLI 参数，走允许清单。会扩大权限、破坏 JSON 协议或与类型化设置重复的标志会被丢弃并回报。 |
 | `roles` | 内置 | 自定义角色：新增，或复用内置角色名覆盖之。 |
 | `autoConsult` | `{ enabled: [], capPerRole: 3 }` | 自动咨询的默认勾选集（角色键如 `claude-code:reviewer`）与每角色每会话预算。 |
 
@@ -119,7 +120,7 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 ## 一次咨询如何运行
 
 - 每次咨询一个 `claude -p` 进程；问题（及可选材料）经 **stdin** 送入，角色人设经 `--append-system-prompt` 注入，回复以单个 JSON 文档返回。
-- headless 会话保持 Claude Code 打印模式默认行为：只读工具可用，需要权限的操作自动拒绝。绝不传入任何绕过权限的标志。
+- 当已安装的 CLI 声明了 `--tools` 时，headless 会话被限制为 Read/Grep/Glob。会扩大权限的 `extraArgs` 到不了 argv。调用方取消（`AbortSignal`）与墙钟超时分开回报。
 - 墙钟超时（默认 5 分钟）SIGTERM → SIGKILL 递进；`--max-turns`（默认 8）限制 CLI 内部的代理轮数。
 - 每次回复都带有给 Claude 的共同框架——*这是另一个 agent 将要权衡的参考答案*——自定义角色同样继承“建议而非命令”的契约。
 
@@ -127,7 +128,7 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 
 **插件保证的部分：**
 
-- 绝不传 `--dangerously-skip-permissions` 等绕过权限的标志；headless 会话保持在打印模式的自动拒绝之内（只读工具可用，需权限的操作一律自动拒绝）。
+- 绝不传 `--dangerously-skip-permissions` 等绕过权限的标志。`extraArgs` 是允许清单，不是原样透传。当已安装的 CLI 声明了 `--tools` 时，咨询被限制为 Read、Grep、Glob。
 - 提示词只经 argv/stdin 到达本地 CLI——插件自身不引入第三方服务、无遥测、不存凭据。路由强制同源（same-origin）；设置文件 0600 权限原子写入；子进程输出有大小上限，超时必定回收。
 - Claude 的回复以工具结果**数据**的形式返回给 DSH agent，并被框定为供权衡的参考答案（"建议而非命令"），不构成指令通道。
 

@@ -96,7 +96,8 @@ The row's config still works as the base layer (settings file wins once saved):
 | `timeoutMs` | `300000` | Wall-clock cap per consultation. |
 | `maxTurns` | `8` | Agentic turn cap inside the CLI. |
 | `maxPanelRoles` | `4` | Roles per `consult_panel` call. |
-| `extraArgs` | `[]` | Raw extra CLI args for power users. |
+| `maxBudgetUsd` | `0` | Per-run dollar cap (`--max-budget-usd`) when the CLI supports it. `0` means no cap. |
+| `extraArgs` | `[]` | Extra CLI args, allowlisted. Flags that widen permissions, break the JSON protocol, or duplicate typed settings are dropped and reported. |
 | `roles` | built-ins | Custom roles: add new ones, or override a built-in by reusing its name. |
 | `autoConsult` | `{ enabled: [], capPerRole: 3 }` | Default checked set for the auto-consult toggle (role keys like `claude-code:reviewer`) and the per-role per-session budget. |
 
@@ -119,7 +120,7 @@ Example — a security-focused custom role:
 ## How a consultation runs
 
 - One `claude -p` process per consultation; the question (plus optional material) goes in via **stdin**, the role persona via `--append-system-prompt`, the reply comes back as one JSON document.
-- The headless session keeps Claude Code's print-mode defaults: read-only tools may run, anything requiring permission is auto-denied. No permission-bypassing flags are ever passed.
+- The headless session is restricted to Read/Grep/Glob when the installed CLI advertises `--tools`. Permission-widening `extraArgs` never reach argv. Caller cancellation (`AbortSignal`) and the wall-clock timeout stay distinguishable.
 - Wall-clock timeout (default 5 min) with SIGTERM → SIGKILL escalation; `--max-turns` (default 8) caps agentic turns inside the CLI.
 - Every reply carries a shared framing for Claude — *this is a reference answer another agent will weigh* — so even custom roles inherit the "advice, not orders" contract.
 
@@ -127,7 +128,7 @@ Example — a security-focused custom role:
 
 **What the plugin guarantees:**
 
-- The plugin never passes `--dangerously-skip-permissions` or any permission-bypassing flag; headless sessions stay within print-mode auto-denial for anything privileged (read-only tools may run, everything requiring permission is auto-denied).
+- The plugin never passes `--dangerously-skip-permissions` or any permission-bypassing flag. `extraArgs` is an allowlist, not a passthrough. When the installed CLI advertises `--tools`, the consultation is restricted to Read, Grep and Glob.
 - Prompts travel as argv/stdin to the local CLI only — the plugin itself adds no third-party service, no telemetry, no credential storage. Routes enforce same-origin; the settings file is 0600 and atomically written; subprocess output is size-capped and timeouts always reap the child.
 - Claude's reply is returned to the DSH agent as tool-result **data**, framed as a reference answer to weigh ("advice, not orders"), never as an instruction channel.
 

@@ -84,9 +84,24 @@ function emit() {
       process.exit(Number(process.env.FAKE_CLAUDE_EXIT ?? 1))
       break
     case 'flood': {
+      // Must respect backpressure: process.exit() truncates pending pipe
+      // writes, so a naive write loop delivers one pipe buffer (64 KiB) and
+      // no consumer can ever reach a multi-MiB capture cap. Drain, then let
+      // the process end on its own once stdout has flushed.
       const block = 'x'.repeat(1024 * 1024)
-      for (let i = 0; i < 12; i += 1) process.stdout.write(block)
-      process.exit(0)
+      const total = Number(process.env.FAKE_CLAUDE_FLOOD_MIB ?? 12)
+      let sent = 0
+      const pump = () => {
+        while (sent < total) {
+          sent += 1
+          if (!process.stdout.write(block)) {
+            process.stdout.once('drain', pump)
+            return
+          }
+        }
+        process.exitCode = 0
+      }
+      pump()
       break
     }
     default:
@@ -124,9 +139,13 @@ Options:
   --effort <level>                Thinking effort (low, medium, high, xhigh, max)
   --max-turns <n>                 Limit agentic turns
   --max-budget-usd <n>            Stop once the run costs more than this
-  --no-session-persistence        Do not persist the session
-  --allowedTools <tools...>       Tools allowed without prompting
-  --disallowedTools <tools...>    Tools denied
+  --no-session-persistence        Do not persist the session (--print only)
+  --tools <tools...>              Specify the list of available tools from the
+                                  built-in set
+  --allowedTools, --allowed-tools <tools...>
+                                  Tools allowed without prompting
+  --disallowedTools, --disallowed-tools <tools...>
+                                  Tools denied
   --permission-mode <mode>        Permission mode
   --dangerously-skip-permissions  Bypass all permission checks
   -h, --help                      Display help
