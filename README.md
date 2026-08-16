@@ -66,7 +66,7 @@ The agent picks the role, packs the material into context, and calls `consult_ex
 
 **Settings → Expert Consult** is organized as one workspace per harness CLI — a tab bar over the catalog (`claude-code` live; `codex`, `zcode`, `kimi-code`, `pi`, `opencode`, `omp` reserved with a planned-status page and no settings stored until their runners land). The Claude Code workspace manages everything at runtime:
 
-- **General** — CLI path, default model (dropdown suggesting `opus`/`sonnet`/`fable`, free text accepts full ids), thinking effort (`--effort`: low/medium/high/xhigh/max), fallback model, per-call timeout, max turns, panel size, extra CLI args.
+- **General** — CLI path, default model (full catalog: follow-CLI-default, latest aliases, and versioned ids like `claude-opus-5` — extracted from the CLI itself), thinking effort (`--effort`: low/medium/high/xhigh/max), fallback model, per-call timeout, max turns, panel size, extra CLI args.
 - **Roles workspace** — add / edit / delete roles, each with name, label, description, system prompt, a dedicated model, a dedicated fallback, and a dedicated thinking effort. A role's switch disables it omp-style: it stays in the roster but leaves the tools' enum until re-enabled.
 - **Connectivity test** — one real consultation end-to-end (CLI + auth + proxy), with turns, duration, cost, and a fallback-used marker.
 - **Save & apply** persists to `~/.dsh/dsh-capability-optimizer/settings.json` (atomic writes, 0600) and hot-applies: the agent tools re-register immediately. **Reset** removes the file and restores defaults.

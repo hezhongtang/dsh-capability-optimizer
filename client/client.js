@@ -31,11 +31,13 @@ const zh = {
   fileError: '设置文件读取异常（已回退到组合配置）',
   generalTitle: '通用',
   cliPath: 'claude CLI 路径',
+  modelDefault: '跟随 CLI 默认',
+  modelGroupLatest: '最新别名',
+  modelGroupVersioned: '带版本',
+  modelCurrent: '当前值',
   cliPathPh: '留空 = 使用 PATH 上的 claude',
   defaultModel: '默认模型',
-  modelPh: '如 opus / sonnet，留空 = CLI 默认',
   fallbackModel: '回退模型（fallback）',
-  fallbackPh: '模型级错误时重试一次，留空 = 不回退',
   effort: '推理等级（thinking effort）',
   effortDefault: '跟随默认',
   effortLow: '低（low）',
@@ -104,11 +106,13 @@ const en = {
   fileError: 'Settings file unreadable (fell back to composition config)',
   generalTitle: 'General',
   cliPath: 'claude CLI path',
+  modelDefault: 'Follow CLI default',
+  modelGroupLatest: 'Latest aliases',
+  modelGroupVersioned: 'Versioned',
+  modelCurrent: 'Current value',
   cliPathPh: 'empty = claude from PATH',
   defaultModel: 'Default model',
-  modelPh: 'e.g. opus / sonnet, empty = CLI default',
   fallbackModel: 'Fallback model',
-  fallbackPh: 'retried once on model-level errors, empty = off',
   effort: 'Thinking effort',
   effortDefault: 'Default',
   effortLow: 'Low',
@@ -268,20 +272,31 @@ function NumberField({ label, value, onChange, max }) {
     }))
 }
 
-/** Model aliases the CLI itself documents; the datalist suggests but still
- * accepts a full model id typed by hand. */
-const MODEL_SUGGESTIONS = ['opus', 'sonnet', 'fable']
-
-function ModelField({ label, value, placeholder, onChange }) {
-  const listId = `dco-models${useId().replace(/[^a-zA-Z0-9]/g, '')}`
+/**
+ * Grouped model select over the host-served catalog: an explicit
+ * follow-CLI-default option, latest aliases, and versioned full ids. A
+ * stored value outside the catalog (set by an older release or by hand)
+ * still renders through a passthrough option instead of vanishing.
+ */
+function ModelField({ label, value, t, models, onChange }) {
+  const catalog = models ?? { aliases: [], versioned: [] }
+  const known = new Set(['', ...catalog.aliases, ...catalog.versioned])
+  const extra = value !== '' && !known.has(value)
+  const opt = (v, label, group) => h('option', { key: `g${group}:${v}`, value: v }, label)
   return h('div', { className: 'dco-field' },
     h('label', null, label),
-    h('input', {
-      className: 'dco-input', list: listId, value, placeholder,
-      onChange: (e) => onChange(e.target.value),
+    h('select', {
+      className: 'dco-input',
       style: { fontFamily: 'var(--dsw-alias-font-mono,monospace)' },
-    }),
-    h('datalist', { id: listId }, MODEL_SUGGESTIONS.map((m) => h('option', { key: m, value: m }))))
+      value,
+      onChange: (e) => onChange(e.target.value),
+    },
+      opt('', t('modelDefault'), 'd'),
+      extra ? opt(value, `${t('modelCurrent')}: ${value}`, 'x') : null,
+      catalog.aliases.length > 0 ? h('optgroup', { key: 'ga', label: t('modelGroupLatest') },
+        catalog.aliases.map((m) => opt(m, m, 'a'))) : null,
+      catalog.versioned.length > 0 ? h('optgroup', { key: 'gv', label: t('modelGroupVersioned') },
+        catalog.versioned.map((m) => opt(m, m, 'v'))) : null))
 }
 
 const EFFORT_OPTIONS = [
@@ -307,7 +322,7 @@ function Switch({ on, onToggle, title }) {
   })
 }
 
-function RoleEditor({ role, isNew, t, onSave, onClose }) {
+function RoleEditor({ role, isNew, t, models, onSave, onClose }) {
   const [draft, setDraft] = useState(role)
   const [problem, setProblem] = useState('')
   // Functional updates throughout: rapid batched input events must each build
@@ -337,8 +352,8 @@ function RoleEditor({ role, isNew, t, onSave, onClose }) {
             onChange: (e) => set('systemPrompt')(e.target.value),
           })),
         h('div', { className: 'dco-grid' },
-          h(ModelField, { label: t('roleModel'), value: draft.model ?? '', onChange: set('model'), placeholder: t('modelPh') }),
-          h(ModelField, { label: t('roleFallback'), value: draft.fallbackModel ?? '', onChange: set('fallbackModel'), placeholder: t('fallbackPh') }),
+          h(ModelField, { label: t('roleModel'), value: draft.model ?? '', t, models, onChange: set('model') }),
+          h(ModelField, { label: t('roleFallback'), value: draft.fallbackModel ?? '', t, models, onChange: set('fallbackModel') }),
           h(EffortField, { label: t('effort'), value: draft.effort ?? '', t, onChange: set('effort') })),
         problem ? h('div', { className: 'dco-status err' }, problem) : null),
       h('div', { className: 'dco-modal-foot' },
@@ -504,9 +519,9 @@ function Section({ t }) {
       h('h3', null, t('generalTitle')),
       h('div', { className: 'dco-grid' },
         h(TextField, { label: t('cliPath'), value: draft.cliPath ?? '', placeholder: t('cliPathPh'), onChange: field('cliPath'), mono: true }),
-        h(ModelField, { label: t('defaultModel'), value: draft.model ?? '', placeholder: t('modelPh'), onChange: field('model') }),
+        h(ModelField, { label: t('defaultModel'), value: draft.model ?? '', t, models: loaded.models, onChange: field('model') }),
         h(EffortField, { label: t('effort'), value: draft.effort ?? '', t, onChange: field('effort') }),
-        h(ModelField, { label: t('fallbackModel'), value: draft.fallbackModel ?? '', placeholder: t('fallbackPh'), onChange: field('fallbackModel') }),
+        h(ModelField, { label: t('fallbackModel'), value: draft.fallbackModel ?? '', t, models: loaded.models, onChange: field('fallbackModel') }),
         h(NumberField, { label: t('timeoutMs'), value: draft.timeoutMs, max: 3600000, onChange: num('timeoutMs', 300000) }),
         h(NumberField, { label: t('maxTurns'), value: draft.maxTurns, max: 200, onChange: num('maxTurns', 8) }),
         h(NumberField, { label: t('maxPanelRoles'), value: draft.maxPanelRoles, max: 32, onChange: num('maxPanelRoles', 4) }),
@@ -543,7 +558,7 @@ function Section({ t }) {
       status ? h('span', { className: `dco-status ${status.kind}` }, status.text) : null),
 
     editing !== null && h(RoleEditor, {
-      role: editing.role, isNew: editing.isNew, t,
+      role: editing.role, isNew: editing.isNew, t, models: loaded.models,
       onClose: () => setEditing(null),
       onSave: (role) => {
         const index = editing.isNew ? draft.roles.length : draft.roles.indexOf(editing.role)
