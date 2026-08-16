@@ -1,0 +1,7 @@
+# dsh-capability-optimizer bundle patch: mounts the external-expert consultation
+# tools into a profile layer stack. Behavior is configured through the row's
+# config (roles, cliPath, model, timeouts); overrides may target this id from
+# the profile's own patch file.
+- insert:
+    - id: dsh-capability-optimizer
+      name: 'dsh-capability-optimizer'

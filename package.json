@@ -1,0 +1,62 @@
+{
+  "name": "dsh-capability-optimizer",
+  "version": "0.4.0",
+  "description": "External-expert consultation for DeepSeek Harness: headlessly invokes the Claude Code CLI with role personas (advisor / reviewer / designer, extensible via config) and returns the subscription model's replies as reference answers for the agent to weigh. · DSH 外部专家咨询：headless 调用 Claude Code CLI，以 advisor / reviewer / designer 等角色人设（可通过配置扩展）获得订阅模型的回复，作为给 agent 权衡的参考答案。",
+  "keywords": [
+    "dsh-plugin",
+    "deepseek-harness",
+    "dsh",
+    "claude-code",
+    "advisor",
+    "reviewer",
+    "designer",
+    "second-opinion",
+    "agent-tools",
+    "cordis-plugin",
+    "capability"
+  ],
+  "type": "module",
+  "main": "lib/index.js",
+  "license": "MIT",
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/hezhongtang/dsh-capability-optimizer.git"
+  },
+  "dsh": {
+    "bundle": {
+      "patch": "./cordis.patch.yml"
+    },
+    "client": {
+      "inject": [
+        "@deepseek-ai/dsh-client-runtime",
+        "@deepseek-ai/dsh-client-locale",
+        "@deepseek-ai/dsh-client-ui-settings"
+      ],
+      "platform": "web"
+    }
+  },
+  "exports": {
+    ".": "./lib/index.js",
+    "./client": "./client/client.js",
+    "./cordis.patch.yml": "./cordis.patch.yml",
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "lib",
+    "client",
+    "assets",
+    "cordis.patch.yml",
+    "README.md",
+    "README.zh.md",
+    "LICENSE"
+  ],
+  "peerDependencies": {
+    "@deepseek-ai/cordis": ">=4.0.0-rc.7 <5.0.0",
+    "@deepseek-ai/dsh-tools": ">=0.0.1-rc.1"
+  },
+  "peerDependenciesMeta": {
+    "@deepseek-ai/dsh-tools": {
+      "optional": true
+    }
+  }
+}
