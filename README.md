@@ -27,10 +27,11 @@ Phase 1 speaks only to the Claude Code CLI. The settings schema (v2, one workspa
 | 🧠 **Thinking effort** | Native `--effort` (low / medium / high / xhigh / max) at three levels: per-call argument > role > global default |
 | 🔄 **Model fallback** | One-hop retry on model-level errors (`unrecognized_model`, model-not-found, …) with `usedFallback` recorded in run metadata |
 | 🤖 **Agent tools** | `consult_expert` (one role, one question) · `consult_panel` (up to N roles in parallel, one wall-clock wait) · `consult_roles` (live roster) |
+| 🎛 **Auto consult** | Composer-seat toggle (permissions row) picks roles per session; a policy section rides the system prompt and lifecycle nudges fire at write/finish anchors, budgeted per role per session |
 | 🖥 **Settings workspace** | One tab per harness CLI; saves hot-apply — role edits reach the agent's next model step without a dsh restart |
 | 🔬 **Connectivity test** | One real consultation end-to-end (CLI + login + proxy) with turns, duration, cost, and fallback marker |
 | 🛡 **Safe by default** | No permission-bypassing flags, ever; read-only tools inside headless sessions, privileged actions auto-denied |
-| 🌐 **Fully bilingual** | Every settings string follows the UI language (zh/en); agent tooling keeps stable English identifiers |
+| 🌐 **Fully bilingual** | Every UI string — including built-in role descriptions, reserved-backend notes, and validation messages — follows the UI language (zh/en); agent tooling keeps stable English identifiers |
 
 ## Install
 
@@ -62,12 +63,23 @@ The agent picks the role, packs the material into context, and calls `consult_ex
 
 \* Read-only for your workspace; each call spends your Claude subscription quota — the tool descriptions themselves tell the model to batch material instead of machine-gunning calls.
 
+## Auto consult
+
+The composer toolbar (the permissions control's row) carries an Expert Consult toggle: check roles for this session and the host proactively works them into the loop — no prompting, no re-explaining.
+
+- **Policy section**: every model request carries a short policy block naming the checked roles and when each applies (advisor at decision points, reviewer before declaring work done, designer before significant new code).
+- **Lifecycle nudges**: the first file write of a turn arms the designer anchor (the nudge rides the next step of that turn); a turn that changed files and is about to finish without a reviewer pass is steered one more step to consult first.
+- **Budget**: `capPerRole` (default 3) counts real `consult_*` calls per role per session — nudges and the model's own discretionary calls share it. At the cap the promise drops out of the policy text and the anchors go quiet.
+- **Soft by design**: a nudge guarantees the instruction is delivered, never the tool call — dsh has no forced-call API. A model that declines must state the reason in one line.
+- The popover shows live usage counts (`used/cap`) per role; the last selection is remembered per browser. **Settings → Expert Consult → Auto consult** edits the default checked set and budget (row-config key `autoConsult`) — the same layer tui/headless profiles consume.
+
 ## Settings UI
 
 **Settings → Expert Consult** is organized as one workspace per harness CLI — a tab bar over the catalog (`claude-code` live; `codex`, `zcode`, `kimi-code`, `pi`, `opencode`, `omp` reserved with a planned-status page and no settings stored until their runners land). The Claude Code workspace manages everything at runtime:
 
 - **General** — CLI path, default model (full catalog: follow-CLI-default, latest aliases, and versioned ids like `claude-opus-5` — extracted from the CLI itself), thinking effort (`--effort`: low/medium/high/xhigh/max), fallback model, per-call timeout, max turns, panel size, extra CLI args.
 - **Roles workspace** — add / edit / delete roles, each with name, label, description, system prompt, a dedicated model, a dedicated fallback, and a dedicated thinking effort. A role's switch disables it omp-style: it stays in the roster but leaves the tools' enum until re-enabled.
+- **Auto consult** — the default checked set plus the per-role per-session call budget; the composer toggle overrides it per session.
 - **Connectivity test** — one real consultation end-to-end (CLI + auth + proxy), with turns, duration, cost, and a fallback-used marker.
 - **Save & apply** persists to `~/.dsh/dsh-capability-optimizer/settings.json` (atomic writes, 0600) and hot-applies: the agent tools re-register immediately. **Reset** removes the file and restores defaults.
 
@@ -86,6 +98,7 @@ The row's config still works as the base layer (settings file wins once saved):
 | `maxPanelRoles` | `4` | Roles per `consult_panel` call. |
 | `extraArgs` | `[]` | Raw extra CLI args for power users. |
 | `roles` | built-ins | Custom roles: add new ones, or override a built-in by reusing its name. |
+| `autoConsult` | `{ enabled: [], capPerRole: 3 }` | Default checked set for the auto-consult toggle (role keys like `claude-code:reviewer`) and the per-role per-session budget. |
 
 Example — a security-focused custom role:
 

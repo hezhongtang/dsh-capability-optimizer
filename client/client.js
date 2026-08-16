@@ -5,10 +5,16 @@ var module = { exports: {} }; var exports = module.exports;
 /**
  * dsh-capability-optimizer client.
  *
- * One seat: a Settings section ("Expert Consult") managing the consultation
- * settings — CLI path, default + fallback models (omp-style one-hop model
- * fallback), timeouts, and the role roster workspace (add / edit / toggle /
- * delete, omp-style enabled flag that parks a role without dropping it).
+ * Two seats:
+ *  - a Settings section ("Expert Consult") managing the consultation
+ *    settings — CLI path, default + fallback models (omp-style one-hop model
+ *    fallback), timeouts, the role roster workspace (add / edit / toggle /
+ *    delete, omp-style enabled flag that parks a role without dropping it),
+ *    and the auto-consult defaults (checked set + per-role session cap);
+ *  - a composer-seat toggle in the conversation input toolbar: check roles
+ *    per session and the host proactively consults them (policy section +
+ *    lifecycle nudges; see lib/autoconsult.js), with live usage counts.
+ *
  * Saves hot-apply on the host: the agent tools re-register immediately, no
  * dsh restart. Includes an end-to-end test call that really consults Claude
  * once (spends quota) to verify CLI + auth + proxy.
@@ -18,13 +24,13 @@ var module = { exports: {} }; var exports = module.exports;
 
 const React = require('react')
 const h = React.createElement
-const { useState, useEffect, useCallback, useId } = React
+const { useState, useEffect, useCallback, useRef } = React
 
 const NS = 'dsh-capability-optimizer'
 
 const zh = {
   nav: '专家咨询',
-  subtitle: '以角色人设 headless 调用 Claude Code，回复作为参考答案',
+  subtitle: '以角色人设无头（headless）调用 Claude Code，回复作为参考答案',
   loading: '加载中…',
   loadFail: '加载失败',
   retry: '重试',
@@ -37,8 +43,8 @@ const zh = {
   modelCurrent: '当前值',
   cliPathPh: '留空 = 使用 PATH 上的 claude',
   defaultModel: '默认模型',
-  fallbackModel: '回退模型（fallback）',
-  effort: '推理等级（thinking effort）',
+  fallbackModel: '回退模型',
+  effort: '推理等级（--effort）',
   effortDefault: '跟随默认',
   effortLow: '低（low）',
   effortMedium: '中（medium）',
@@ -65,11 +71,16 @@ const zh = {
   disabled: '已停用',
   roleModelPill: '模型',
   roleFallbackPill: '回退',
+  roleEffortPill: '推理等级',
   builtin: '内置',
   custom: '自定义',
+  builtinDescAdvisor: '务实的高级工程师参谋：权衡、风险与下一步动作。方向与决策点选它。',
+  builtinDescReviewer: '苛刻的代码 / diff / 方案评审：bug、边界情况、安全、测试缺失。宣布完成前选它。',
+  builtinDescDesigner: '结构与接口的架构师：模块边界、API 形态、数据流、备选方案与权衡。动重要代码前选它。',
   delete: '删除',
   confirmDelete: '删除该角色？',
   cancel: '取消',
+  close: '关闭',
   save: '保存并生效',
   saving: '保存中…',
   saved: '已保存并热生效',
@@ -91,9 +102,27 @@ const zh = {
   usedFallback: '已触发模型回退',
   requiredPrompt: '启用状态的角色提示词不能为空',
   nameRequired: '名称不能为空',
+  errDupRole: '角色名称重复',
+  errNoRoles: '至少保留一个角色',
+  errAllDisabled: '至少启用一个角色',
+  errNumberRange: '数值超出允许范围',
+  autoTitle: '自动咨询',
+  autoHint: '勾选的角色会在关键节点被主动咨询：政策写入系统提示，必要时催办；每次调用消耗 Claude 订阅额度',
+  autoCap: '每角色每会话调用上限',
+  autoDefaultsHint: '这里是默认勾选集；聊天框开关可按会话临时覆盖',
+  acTooltip: '专家咨询 · 自动',
+  acEmpty: '没有可用的角色',
+  acFollowDefaults: '跟随默认配置',
+  acOverrideOn: '本会话已覆盖默认',
   tabPlanned: '规划中',
   reservedTitle: '工作区已预留',
   reservedBody: '该 harness 的运行器就绪后，其配置将在此展开；角色体系与咨询工具保持共用。',
+  noteCodex: '已预留：以同一角色体系接入 exec / proto 模式。',
+  noteZcode: '已预留：待 ZCode 提供无头入口。',
+  noteKimiCode: '已预留：待 Kimi Code CLI 就绪。',
+  notePi: '已预留：以 Pi agent-core 会话作为咨询后端。',
+  noteOpencode: '已预留：以同一组工具接入 OpenCode run / agent 模式。',
+  noteOmp: '已预留：与 Oh My Pi 的 advisor 角色体系互通。',
   cliCommandLabel: 'CLI 命令',
 }
 
@@ -140,11 +169,16 @@ const en = {
   disabled: 'Disabled',
   roleModelPill: 'model',
   roleFallbackPill: 'fallback',
+  roleEffortPill: 'effort',
   builtin: 'built-in',
   custom: 'custom',
+  builtinDescAdvisor: 'Pragmatic senior-engineer counsel: trade-offs, risks, and what to do next. Pick for direction and decision points.',
+  builtinDescReviewer: 'Critical reviewer of code, diffs, or plans: bugs, edge cases, security, missing tests. Pick before declaring work done.',
+  builtinDescDesigner: 'Architect for structure and interfaces: module boundaries, API shape, data flow, alternatives with trade-offs. Pick before significant new code.',
   delete: 'Delete',
   confirmDelete: 'Delete this role?',
   cancel: 'Cancel',
+  close: 'Close',
   save: 'Save & apply',
   saving: 'Saving…',
   saved: 'Saved and hot-applied',
@@ -166,13 +200,55 @@ const en = {
   usedFallback: 'model fallback used',
   requiredPrompt: 'An enabled role needs a system prompt',
   nameRequired: 'Name is required',
+  errDupRole: 'Duplicate role name',
+  errNoRoles: 'Keep at least one role',
+  errAllDisabled: 'At least one role must stay enabled',
+  errNumberRange: 'Value out of range',
+  autoTitle: 'Auto consult',
+  autoHint: 'Checked roles are consulted proactively at key points: policy rides the system prompt, with nudges when needed; each call spends Claude subscription quota',
+  autoCap: 'Per-role calls per session',
+  autoDefaultsHint: 'This is the default checked set; the composer toggle overrides it per session',
+  acTooltip: 'Expert consult · auto',
+  acEmpty: 'No roles available',
+  acFollowDefaults: 'Follow defaults',
+  acOverrideOn: 'defaults overridden this session',
   tabPlanned: 'planned',
   reservedTitle: 'Workspace reserved',
   reservedBody: 'Once this harness\'s runner lands, its configuration unfolds here; the role roster and consultation tools stay shared.',
+  noteCodex: 'Reserved: exec / proto modes behind the same role roster.',
+  noteZcode: 'Reserved: workspace pending the ZCode headless entry point.',
+  noteKimiCode: 'Reserved: workspace pending the Kimi Code CLI.',
+  notePi: 'Reserved: Pi agent-core sessions as a consultation backend.',
+  noteOpencode: 'Reserved: OpenCode run/agent modes behind the same tools.',
+  noteOmp: 'Reserved: Oh My Pi advisor roster interop.',
   cliCommandLabel: 'CLI command',
 }
 
-const BUILTIN_NAMES = new Set(['advisor', 'reviewer', 'designer'])
+// Built-in roster membership plus the pristine-description test. The agent
+// consumes role descriptions in English (lib/roles.js); the roster card shows
+// the dictionary translation only while the stored description still equals
+// the built-in text, so a user edit always wins over the gloss.
+const BUILTIN_DESC_EN = {
+  advisor: 'Pragmatic senior-engineer counsel: trade-offs, risks, and what to do next. Pick for direction and decision points.',
+  reviewer: 'Critical reviewer of code, diffs, or plans: bugs, edge cases, security, missing tests. Pick before declaring work done.',
+  designer: 'Architect for structure and interfaces: module boundaries, API shape, data flow, alternatives with trade-offs. Pick before significant new code.',
+}
+const BUILTIN_DESC_KEYS = {
+  advisor: 'builtinDescAdvisor',
+  reviewer: 'builtinDescReviewer',
+  designer: 'builtinDescDesigner',
+}
+// Reserved-backend notes are UI copy, so they live in the dictionaries (the
+// host catalog carries no locale); the host note stays as a fallback for ids
+// without a key. New backends should add a note<Id> key to both dictionaries.
+const BACKEND_NOTE_KEYS = {
+  codex: 'noteCodex',
+  zcode: 'noteZcode',
+  'kimi-code': 'noteKimiCode',
+  pi: 'notePi',
+  opencode: 'noteOpencode',
+  omp: 'noteOmp',
+}
 
 const CSS = [
   '.dco-section{display:flex;flex-direction:column;gap:18px;max-width:760px}',
@@ -233,6 +309,28 @@ const CSS = [
   '.dco-reserved{border:1px dashed var(--dsw-alias-border-l2,rgba(127,127,127,.4));border-radius:10px;padding:28px 20px;display:flex;flex-direction:column;align-items:center;gap:8px;text-align:center}',
   '.dsh-reserved-name{font-size:14px;font-weight:600}',
   '.dco-reserved .dco-hint{max-width:420px}',
+  '.dco-ac{display:flex;align-items:center;flex:none}',
+  '.dco-ac-btn{height:28px;border-radius:999px;border:none;background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:0 11px;font:inherit;font-size:12px;font-weight:500;white-space:nowrap}',
+  '.dco-ac-btn:hover{background:rgba(127,127,127,.14)}',
+  '.dco-ac-btn.on{background:var(--dsw-alias-accent-soft,rgba(91,76,240,.14))}',
+  '.dco-ac-count{min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--dsw-alias-accent,#5b4cf0);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center;flex:none}',
+  '.dco-ac-pop{position:fixed;width:264px;transform:translateY(-100%);background:var(--dsw-alias-bg-overlay,#fff);color:var(--dsw-alias-label-primary,inherit);border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.4));border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:12px;display:flex;flex-direction:column;gap:8px;z-index:95}',
+  '.dco-ac-pop h4{margin:0;font-size:12.5px;font-weight:600}',
+  '.dco-ac-note{font-size:10.5px;opacity:.6;line-height:1.45}',
+  '.dco-ac-list{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto}',
+  '.dco-ac-item{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px}',
+  '.dco-ac-item:hover{background:rgba(127,127,127,.1)}',
+  '.dco-ac-item.dis{opacity:.45;cursor:not-allowed}',
+  '.dco-ac-item input{accent-color:var(--dsw-alias-accent,#5b4cf0);margin:0;flex:none}',
+  '.dco-ac-name{font-family:var(--dsw-alias-font-mono,monospace);font-weight:600}',
+  '.dco-ac-label{opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+  '.dco-ac-usage{margin-left:auto;font-size:10.5px;opacity:.55;flex:none;font-variant-numeric:tabular-nums}',
+  '.dco-ac-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));padding-top:8px}',
+  '.dco-ac-ovr{font-size:10px;opacity:.55}',
+  '.dco-ac-link{border:none;background:none;color:var(--dsw-alias-accent,#5b4cf0);font:inherit;font-size:11px;cursor:pointer;padding:0}',
+  '.dco-check{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px}',
+  '.dco-check:hover{background:rgba(127,127,127,.1)}',
+  '.dco-check input{accent-color:var(--dsw-alias-accent,#5b4cf0);margin:0;flex:none}',
 ].join('\n')
 
 let stylesMounted = false
@@ -324,7 +422,7 @@ function Switch({ on, onToggle, title }) {
   })
 }
 
-function RoleEditor({ role, isNew, t, models, onSave, onClose }) {
+function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
   const [draft, setDraft] = useState(role)
   const [problem, setProblem] = useState('')
   // Functional updates throughout: rapid batched input events must each build
@@ -334,6 +432,7 @@ function RoleEditor({ role, isNew, t, models, onSave, onClose }) {
   const save = () => {
     const name = String(draft.name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
     if (name.length === 0) { setProblem(t('nameRequired')); return }
+    if (names.has(name)) { setProblem(`${t('errDupRole')}: ${name}`); return }
     if (draft.enabled !== false && String(draft.systemPrompt ?? '').trim().length === 0) { setProblem(t('requiredPrompt')); return }
     onSave({ ...draft, name })
   }
@@ -342,7 +441,7 @@ function RoleEditor({ role, isNew, t, models, onSave, onClose }) {
     h('div', { className: 'dco-modal', onClick: (e) => e.stopPropagation() },
       h('div', { className: 'dco-modal-head' },
         h('h3', null, isNew ? t('addRole') : `${t('editRole')} · ${draft.name}`),
-        h('button', { className: 'dco-modal-x', onClick: onClose, 'aria-label': 'close' }, '✕')),
+        h('button', { className: 'dco-modal-x', onClick: onClose, 'aria-label': t('close') }, '✕')),
       h('div', { className: 'dco-modal-body' },
         h(TextField, { label: t('roleName'), value: draft.name ?? '', onChange: set('name'), mono: true }),
         h(TextField, { label: t('roleLabel'), value: draft.label ?? '', onChange: set('label') }),
@@ -356,7 +455,7 @@ function RoleEditor({ role, isNew, t, models, onSave, onClose }) {
         h('div', { className: 'dco-grid' },
           h(ModelField, { label: t('roleModel'), value: draft.model ?? '', t, models, onChange: set('model') }),
           h(ModelField, { label: t('roleFallback'), value: draft.fallbackModel ?? '', t, models, onChange: set('fallbackModel') }),
-          h(EffortField, { label: t('effort'), value: draft.effort ?? '', t, onChange: set('effort') })),
+          h(EffortField, { label: t('roleEffort'), value: draft.effort ?? '', t, onChange: set('effort') })),
         problem ? h('div', { className: 'dco-status err' }, problem) : null),
       h('div', { className: 'dco-modal-foot' },
         h('button', { className: 'dco-btn', onClick: onClose }, t('cancel')),
@@ -409,11 +508,169 @@ function TestPanel({ t, roles }) {
         : h('div', { className: 'dco-test-answer' }, result.error ?? '')))
 }
 
+const AUTO_LAST_KEY = 'dsh-capability-optimizer:auto-consult:last'
+
+function readAutoLast() {
+  if (typeof window === 'undefined') return null
+  try {
+    const raw = window.localStorage.getItem(AUTO_LAST_KEY)
+    const parsed = raw === null ? null : JSON.parse(raw)
+    return Array.isArray(parsed) ? parsed : null
+  } catch { return null }
+}
+
+function writeAutoLast(list) {
+  if (typeof window === 'undefined') return
+  try {
+    if (list === null) window.localStorage.removeItem(AUTO_LAST_KEY)
+    else window.localStorage.setItem(AUTO_LAST_KEY, JSON.stringify(list))
+  } catch { /* storage unavailable */ }
+}
+
+/**
+ * Composer-seat toggle: a rounded text pill opening a roster popover. Every
+ * change pushes the session's override to the host (auto-consult runtime);
+ * the last selection is remembered locally and re-applied to sessions that
+ * still follow the defaults. The popover is position:fixed against the
+ * button's measured rect (composer containers may clip absolutely-positioned
+ * children), and it always opens — data not yet loaded shows a loading/retry
+ * shell, so a press is never silently dead. Usage counts refresh while open.
+ */
+function AutoConsultControl({ sessionId, t }) {
+  const [state, setState] = useState(null)   // { defaults, session, roles }
+  const [open, setOpen] = useState(false)
+  const [anchor, setAnchor] = useState(null) // { left, top } measured at open
+  const [busy, setBusy] = useState(false)
+  const root = useRef(null)
+  const btn = useRef(null)
+
+  const pull = useCallback(async () => {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) return
+    try {
+      let data = await api(`/dsh-capability-optimizer/autoconsult?session=${encodeURIComponent(sessionId)}`)
+      // Session still on defaults: seed it with the remembered selection.
+      if (data.session.override === null) {
+        const last = readAutoLast()
+        if (last !== null) {
+          data = await api('/dsh-capability-optimizer/autoconsult-save', {
+            method: 'POST',
+            headers: { 'content-type': 'application/json' },
+            body: JSON.stringify({ session: sessionId, enabled: last }),
+          })
+        }
+      }
+      setState(data)
+    } catch { /* stays null: the popover offers a retry */ }
+  }, [sessionId])
+
+  useEffect(() => { setState(null); pull() }, [pull])
+
+  // Keep usage counts fresh while the popover is open.
+  useEffect(() => {
+    if (!open || typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+    const timer = setInterval(() => {
+      api(`/dsh-capability-optimizer/autoconsult?session=${encodeURIComponent(sessionId)}`)
+        .then((data) => { setState(data) })
+        .catch(() => { /* transient */ })
+    }, 8000)
+    return () => { clearInterval(timer) }
+  }, [open, sessionId])
+
+  // Close on an outside press.
+  useEffect(() => {
+    if (!open) return undefined
+    const onDown = (e) => { if (root.current !== null && !root.current.contains(e.target)) setOpen(false) }
+    document.addEventListener('mousedown', onDown)
+    return () => { document.removeEventListener('mousedown', onDown) }
+  }, [open])
+
+  const toggleOpen = () => {
+    if (!open && btn.current !== null && typeof window !== 'undefined') {
+      const rect = btn.current.getBoundingClientRect()
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - 272))
+      setAnchor({ left, top: rect.top - 8 })
+    }
+    setOpen(!open)
+  }
+
+  const push = async (enabled) => {
+    setBusy(true)
+    try {
+      const data = await api('/dsh-capability-optimizer/autoconsult-save', {
+        method: 'POST',
+        headers: { 'content-type': 'application/json' },
+        body: JSON.stringify({ session: sessionId, enabled }),
+      })
+      setState(data)
+      writeAutoLast(enabled)
+    } catch { /* optimistic state stands; the next open resyncs */ } finally {
+      setBusy(false)
+    }
+  }
+
+  const toggle = (name) => {
+    if (state === null || busy) return
+    const next = new Set(state.session.enabled)
+    if (next.has(name)) next.delete(name)
+    else next.add(name)
+    const list = [...next]
+    setState({ ...state, session: { ...state.session, enabled: list } })
+    push(list)
+  }
+
+  if (typeof sessionId !== 'string' || sessionId.length === 0) return null
+  const enabledCount = state === null ? 0 : state.session.enabled.length
+  const overrideOn = state !== null && state.session.override !== null
+  const cap = state === null ? 0 : state.defaults.capPerRole
+
+  return h('div', { className: 'dco-ac', ref: root },
+    h('button', {
+      className: `dco-ac-btn${enabledCount > 0 ? ' on' : ''}`,
+      type: 'button',
+      title: t('acTooltip'),
+      onClick: toggleOpen,
+      'aria-haspopup': 'true',
+      'aria-expanded': open,
+      ref: btn,
+    }, t('autoTitle'),
+      enabledCount > 0 ? h('span', { className: 'dco-ac-count' }, String(enabledCount)) : null),
+    open && h('div', {
+      className: 'dco-ac-pop',
+      style: anchor === null ? { left: '8px', bottom: '48px' } : { left: `${anchor.left}px`, top: `${anchor.top}px` },
+    },
+      state === null
+        ? h('div', { className: 'dco-ac-note' }, `${t('loading')} `,
+            h('button', { className: 'dco-ac-link', type: 'button', onClick: pull }, t('retry')))
+        : h(React.Fragment, null,
+          h('h4', null, t('autoTitle')),
+          h('div', { className: 'dco-ac-note' }, t('autoHint')),
+          h('div', { className: 'dco-ac-list' },
+            state.roles.length === 0
+              ? h('div', { className: 'dco-ac-note' }, t('acEmpty'))
+              : state.roles.map((role) => h('label', { key: role.name, className: `dco-ac-item${role.enabled ? '' : ' dis'}` },
+                h('input', {
+                  type: 'checkbox',
+                  checked: state.session.enabled.includes(role.name),
+                  disabled: !role.enabled || busy,
+                  onChange: () => { toggle(role.name) },
+                }),
+                h('span', { className: 'dco-ac-name' }, role.name),
+                role.label ? h('span', { className: 'dco-ac-label' }, role.label) : null,
+                h('span', { className: 'dco-ac-usage' }, `${state.session.counts[role.name] ?? 0}/${cap}`))),
+          h('div', { className: 'dco-ac-foot' },
+            h('span', { className: 'dco-ac-ovr' }, overrideOn ? t('acOverrideOn') : null),
+            overrideOn
+              ? h('button', { className: 'dco-ac-link', type: 'button', disabled: busy, onClick: () => { push(null) } }, t('acFollowDefaults'))
+              : null)))))
+}
+
 function ReservedWorkspace({ t, backend }) {
+  const noteKey = BACKEND_NOTE_KEYS[backend.id]
+  const note = (noteKey ? t(noteKey) : '') || backend.note || t('reservedBody')
   return h('div', { className: 'dco-reserved' },
     h('h3', { style: { margin: 0, fontSize: '14px' } }, backend.label),
     h('span', { className: 'dco-pill tag' }, t('tabPlanned')),
-    h('p', { className: 'dco-hint', style: { margin: 0 } }, backend.note || t('reservedBody')),
+    h('p', { className: 'dco-hint', style: { margin: 0 } }, note),
     h('p', { className: 'dco-hint', style: { margin: 0 } },
       `${t('cliCommandLabel')}: `,
       h('code', { style: { fontFamily: 'var(--dsw-alias-font-mono,monospace)' } }, backend.cli)))
@@ -421,8 +678,9 @@ function ReservedWorkspace({ t, backend }) {
 
 function Section({ t }) {
   const [activeBackend, setActiveBackend] = useState('claude-code')
-  const [loaded, setLoaded] = useState(null)   // { effective, fileError, ... }
+  const [loaded, setLoaded] = useState(null)   // { effective, autoConsult, fileError, ... }
   const [draft, setDraft] = useState(null)     // editable copy
+  const [auto, setAuto] = useState(null)       // auto-consult defaults draft
   const [status, setStatus] = useState(null)   // { kind: 'ok'|'err', text }
   const [busy, setBusy] = useState(false)
   const [editing, setEditing] = useState(null) // { role, isNew }
@@ -435,6 +693,7 @@ function Section({ t }) {
       const data = await api('/dsh-capability-optimizer/settings')
       setLoaded(data)
       setDraft(JSON.parse(JSON.stringify(data.effective)))
+      setAuto(JSON.parse(JSON.stringify(data.autoConsult ?? { enabled: [], capPerRole: 3 })))
     } catch (error) {
       setStatus({ kind: 'err', text: `${t('loadFail')}: ${error.message}` })
     }
@@ -451,25 +710,47 @@ function Section({ t }) {
   }
 
   const dirty = JSON.stringify(draft) !== JSON.stringify(loaded.effective)
-  const num = (key, fallback) => (value) => {
+    || JSON.stringify(auto) !== JSON.stringify(loaded.autoConsult)
+  const num = (key, fallback, max) => (value) => {
     const n = Number(value)
-    const next = Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+    let next = Number.isFinite(n) && n > 0 ? Math.floor(n) : fallback
+    if (max !== undefined && next > max) next = max
     setDraft((prev) => ({ ...prev, [key]: next }))
   }
   const field = (key) => (value) => setDraft((prev) => ({ ...prev, [key]: value }))
 
   const save = async () => {
+    // Reject every state the UI can reach before the POST, so the server's
+    // English validation strings never surface in a localized interface.
+    const problems = []
+    if (draft.roles.length === 0) {
+      problems.push(t('errNoRoles'))
+    } else {
+      if (draft.roles.every((r) => r.enabled === false)) problems.push(t('errAllDisabled'))
+      for (const r of draft.roles) {
+        if (r.enabled !== false && String(r.systemPrompt ?? '').trim().length === 0) problems.push(`${t('requiredPrompt')}: ${r.name}`)
+      }
+    }
+    for (const [key, max] of [['timeoutMs', 3600000], ['maxTurns', 3600000], ['maxPanelRoles', 32]]) {
+      const v = Number(draft[key])
+      if (!(Number.isFinite(v) && v > 0 && v <= max)) problems.push(`${t(key)}: ${t('errNumberRange')}`)
+    }
+    if (problems.length > 0) {
+      setStatus({ kind: 'err', text: problems.join(' · ') })
+      return
+    }
     setBusy(true); setStatus(null)
     try {
       const fileBackends = (loaded.fileSettings && loaded.fileSettings.backends) || {}
-      const payload = { version: 2, backends: { ...fileBackends, 'claude-code': draft } }
+      const payload = { version: 2, backends: { ...fileBackends, 'claude-code': draft }, autoConsult: auto }
       const data = await api('/dsh-capability-optimizer/settings-save', {
         method: 'POST',
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      setLoaded({ ...loaded, effective: data.effective })
+      setLoaded({ ...loaded, effective: data.effective, autoConsult: data.autoConsult })
       setDraft(JSON.parse(JSON.stringify(data.effective)))
+      setAuto(JSON.parse(JSON.stringify(data.autoConsult)))
       setStatus({ kind: 'ok', text: t('saved') })
     } catch (error) {
       setStatus({ kind: 'err', text: `${t('saveFail')}: ${error.message}` })
@@ -483,8 +764,9 @@ function Section({ t }) {
     setBusy(true); setStatus(null)
     try {
       const data = await api('/dsh-capability-optimizer/settings/reset', { method: 'POST' })
-      setLoaded({ ...loaded, effective: data.effective })
+      setLoaded({ ...loaded, effective: data.effective, autoConsult: data.autoConsult })
       setDraft(JSON.parse(JSON.stringify(data.effective)))
+      setAuto(JSON.parse(JSON.stringify(data.autoConsult)))
       setStatus({ kind: 'ok', text: t('resetDone') })
     } catch (error) {
       setStatus({ kind: 'err', text: error.message })
@@ -524,9 +806,9 @@ function Section({ t }) {
         h(ModelField, { label: t('defaultModel'), value: draft.model ?? '', t, models: loaded.models, onChange: field('model') }),
         h(EffortField, { label: t('effort'), value: draft.effort ?? '', t, onChange: field('effort') }),
         h(ModelField, { label: t('fallbackModel'), value: draft.fallbackModel ?? '', t, models: loaded.models, onChange: field('fallbackModel') }),
-        h(NumberField, { label: t('timeoutMs'), value: draft.timeoutMs, max: 3600000, onChange: num('timeoutMs', 300000) }),
-        h(NumberField, { label: t('maxTurns'), value: draft.maxTurns, max: 200, onChange: num('maxTurns', 8) }),
-        h(NumberField, { label: t('maxPanelRoles'), value: draft.maxPanelRoles, max: 32, onChange: num('maxPanelRoles', 4) }),
+        h(NumberField, { label: t('timeoutMs'), value: draft.timeoutMs, max: 3600000, onChange: num('timeoutMs', 300000, 3600000) }),
+        h(NumberField, { label: t('maxTurns'), value: draft.maxTurns, max: 200, onChange: num('maxTurns', 8, 200) }),
+        h(NumberField, { label: t('maxPanelRoles'), value: draft.maxPanelRoles, max: 32, onChange: num('maxPanelRoles', 4, 32) }),
         h(TextField, { label: t('extraArgs'), value: (draft.extraArgs ?? []).join(' '), placeholder: t('extraArgsPh'), onChange: (v) => setDraft((prev) => ({ ...prev, extraArgs: v.split(/\s+/).filter((x) => x.length > 0) })), mono: true }))),
 
     h('div', { className: 'dco-card' },
@@ -540,20 +822,48 @@ function Section({ t }) {
           const meta = []
           if (role.model) meta.push(h('span', { key: 'm', className: 'dco-pill' }, `${t('roleModelPill')}: ${role.model}`))
           if (role.fallbackModel) meta.push(h('span', { key: 'f', className: 'dco-pill' }, `${t('roleFallbackPill')}: ${role.fallbackModel}`))
-          if (role.effort) meta.push(h('span', { key: 'e', className: 'dco-pill' }, `${t('effort')}: ${role.effort}`))
+          if (role.effort) meta.push(h('span', { key: 'e', className: 'dco-pill' }, `${t('roleEffortPill')}: ${role.effort}`))
+          const descKey = BUILTIN_DESC_KEYS[role.name]
+          const desc = descKey && role.description === BUILTIN_DESC_EN[role.name] ? t(descKey) : (role.description ?? '')
           return h('div', { className: 'dco-role', key: role.name || index },
             h('div', { className: 'dco-role-top' },
               h('span', { className: `dco-dot${role.enabled === false ? ' off' : ''}` }),
               h('span', { className: 'dco-role-name' }, role.name),
               role.label ? h('span', { style: { fontSize: '12px', opacity: .7 } }, role.label) : null,
-              BUILTIN_NAMES.has(role.name) ? h('span', { className: 'dco-pill tag' }, t('builtin')) : h('span', { className: 'dco-pill' }, t('custom')),
+              role.name in BUILTIN_DESC_EN ? h('span', { className: 'dco-pill tag' }, t('builtin')) : h('span', { className: 'dco-pill' }, t('custom')),
               h('span', { style: { marginLeft: 'auto', display: 'flex', gap: '6px', alignItems: 'center' } },
                 h(Switch, { on: role.enabled !== false, title: t('enabled'), onToggle: () => setRole(index, { enabled: role.enabled === false }) }),
                 h('button', { className: 'dco-btn', onClick: () => setEditing({ role, isNew: false }) }, t('editRole')),
                 h('button', { className: 'dco-btn danger', onClick: () => { if (window.confirm(t('confirmDelete'))) setDraft((prev) => ({ ...prev, roles: prev.roles.filter((_, i) => i !== index) })) } }, t('delete')))),
             meta.length > 0 ? h('div', { className: 'dco-role-meta' }, meta) : null,
-            h('div', { className: 'dco-role-desc' }, role.description ?? ''))
+            h('div', { className: 'dco-role-desc' }, desc))
         })))),
+
+    h('div', { className: 'dco-card' },
+      h('div', { className: 'dco-row' },
+        h('h3', { style: { margin: 0 } }, t('autoTitle')),
+        h('span', { className: 'dco-hint' }, t('autoDefaultsHint'))),
+      h('div', { className: 'dco-hint' }, t('autoHint')),
+      h('div', { style: { display: 'flex', flexDirection: 'column', gap: '2px' } },
+        draft.roles.filter((role) => role.enabled !== false).map((role) => h('label', { key: role.name, className: 'dco-check' },
+          h('input', {
+            type: 'checkbox',
+            checked: auto.enabled.includes(`claude-code:${role.name}`),
+            onChange: (e) => setAuto((prev) => {
+              const key = `claude-code:${role.name}`
+              const set = new Set(prev.enabled)
+              if (e.target.checked) set.add(key)
+              else set.delete(key)
+              return { ...prev, enabled: [...set] }
+            }),
+          }),
+          h('span', { className: 'dco-role-name' }, role.name),
+          role.label ? h('span', { style: { fontSize: '12px', opacity: .7 } }, role.label) : null))),
+      h('div', { className: 'dco-grid' },
+        h(NumberField, { label: t('autoCap'), value: auto.capPerRole, max: 50, onChange: (v) => {
+          const n = Number(v)
+          setAuto((prev) => ({ ...prev, capPerRole: Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 50) : 3 }))
+        } }))),
 
     h(TestPanel, { t, roles: draft.roles }),
 
@@ -565,6 +875,7 @@ function Section({ t }) {
 
     editing !== null && h(RoleEditor, {
       role: editing.role, isNew: editing.isNew, t, models: loaded.models,
+      names: new Set(draft.roles.filter((r) => r !== editing.role).map((r) => r.name)),
       onClose: () => setEditing(null),
       onSave: (role) => {
         const index = editing.isNew ? draft.roles.length : draft.roles.indexOf(editing.role)
@@ -592,6 +903,16 @@ exports.apply = function apply(ctx) {
     locale: NS,
     inject: () => ({ t }),
   }, () => h(Section, { t })))
+
+  // Composer-seat toggle in the conversation input toolbar (the permissions
+  // control's row). Session-scoped: the framework hands the component the
+  // live sessionId as a standard prop; declaring `locale` provides `t`.
+  ctx.slots.inject('conversation.input.left', () => ctx.slots.register({
+    name: 'conversation.input.left',
+    id: 'capability-optimizer',
+    order: 30,
+    locale: NS,
+  }, AutoConsultControl))
 }
 
 return module.exports
