@@ -17,6 +17,9 @@
   ],
   "type": "module",
   "main": "lib/index.js",
+  "scripts": {
+    "test": "node --test test/"
+  },
   "license": "MIT",
   "repository": {
     "type": "git",
