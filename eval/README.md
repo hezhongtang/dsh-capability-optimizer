@@ -11,6 +11,12 @@ budgets.
 This directory is that harness. It runs real consultations through the shipped
 path and reports every quality number next to the spend that bought it.
 
+**Consultant-layer formal baseline** (layer 1) is pre-registered in
+[`docs/plan/p1-55-consultant-baseline.md`](../docs/plan/p1-55-consultant-baseline.md):
+model `sonnet`, 5 trials, envelope must be 100% before any architecture ranking,
+and `panel-3` is never compared to `single-low`. The haiku grid in `results/`
+is a smoke test, not that baseline.
+
 ## What it measures, and what it cannot
 
 **Measured here** — the *consultant layer*:
