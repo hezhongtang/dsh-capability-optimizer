@@ -19,8 +19,8 @@
  *
  * Usage:
  *   node eval/run.mjs --dry-run                 # exercise the plumbing, no quota
- *   node eval/run.mjs --model haiku --trials 2
- *   node eval/run.mjs --arms single-high,panel-3 --tasks session-cache
+ *   node eval/run.mjs --model haiku --arms single-low,single-high --trials 2
+ *   node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high --trials 5 --timeout-ms 1200000
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -32,26 +32,33 @@ import { normalizeConfig } from '../lib/config.js'
 import { ACTIVE_BACKEND } from '../lib/backends.js'
 import { scoreFindings } from './lib/score.mjs'
 import { aggregate } from './lib/aggregate.mjs'
+import { assertConsultantModel } from './lib/consultant-model.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const TASK_DIR = join(HERE, 'tasks')
 const RESULT_DIR = join(HERE, 'results')
 
 /**
- * Matched arms. `panel-3` spends roughly three consultations' worth of compute;
- * `single-high` / `single-xhigh` spend it on one consultation instead. Reading
- * `panel-3` against `single-low` would reproduce exactly the error §5.5 exists
- * to prevent.
+ * Matched arms. The consultant-layer baseline (docs/plan/p1-55-consultant-baseline.md)
+ * is `single-max` vs `panel-3-high` at `claude-opus-5`: one deepest pass
+ * against three shallower ones. The low/high/xhigh ladder and `panel-3-max`
+ * are kept for optional smoke grids only — they are not that baseline.
  */
 const ARMS = {
   'single-low': { roles: ['reviewer'], effort: 'low' },
   'single-high': { roles: ['reviewer'], effort: 'high' },
   'single-xhigh': { roles: ['reviewer'], effort: 'xhigh' },
+  'single-max': { roles: ['reviewer'], effort: 'max' },
   'panel-3': { roles: ['reviewer', 'advisor', 'designer'], effort: 'low' },
+  'panel-3-high': { roles: ['reviewer', 'advisor', 'designer'], effort: 'high' },
+  'panel-3-max': { roles: ['reviewer', 'advisor', 'designer'], effort: 'max' },
 }
 
+/** Reviewer-only smoke ladder. Default so a bare `--model haiku` cannot put advisor on a weaker model. */
+const SMOKE_ARMS = ['single-low', 'single-high', 'single-xhigh']
+
 function parseArgs(argv) {
-  const args = { model: 'haiku', trials: 2, arms: Object.keys(ARMS), tasks: null, dryRun: false, maxTurns: 6 }
+  const args = { model: 'haiku', trials: 2, arms: [...SMOKE_ARMS], tasks: null, dryRun: false, maxTurns: 6, timeoutMs: 300000 }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     const value = argv[index + 1]
@@ -59,6 +66,7 @@ function parseArgs(argv) {
     else if (flag === '--model') { args.model = value; index += 1 }
     else if (flag === '--trials') { args.trials = Number(value); index += 1 }
     else if (flag === '--max-turns') { args.maxTurns = Number(value); index += 1 }
+    else if (flag === '--timeout-ms') { args.timeoutMs = Number(value); index += 1 }
     else if (flag === '--arms') { args.arms = value.split(',').map((name) => name.trim()); index += 1 }
     else if (flag === '--tasks') { args.tasks = value.split(',').map((name) => name.trim()); index += 1 }
     else throw new Error(`unknown flag ${flag}`)
@@ -66,6 +74,11 @@ function parseArgs(argv) {
   const unknown = args.arms.filter((name) => ARMS[name] === undefined)
   if (unknown.length > 0) throw new Error(`unknown arm(s): ${unknown.join(', ')}`)
   if (!Number.isFinite(args.trials) || args.trials < 1) throw new Error('--trials must be >= 1')
+  if (!Number.isFinite(args.maxTurns) || args.maxTurns < 1) throw new Error('--max-turns must be >= 1')
+  if (!Number.isFinite(args.timeoutMs) || args.timeoutMs < 1000) throw new Error('--timeout-ms must be >= 1000')
+  for (const name of args.arms) {
+    assertConsultantModel(args.model, ARMS[name].roles, { dryRun: args.dryRun })
+  }
   return args
 }
 
@@ -129,7 +142,7 @@ function dryRunner(task) {
   })
 }
 
-function buildSettings({ model, maxTurns }) {
+function buildSettings({ model, maxTurns, timeoutMs }) {
   const file = defaultSettings()
   Object.assign(file.backends[ACTIVE_BACKEND], {
     model,
@@ -137,7 +150,7 @@ function buildSettings({ model, maxTurns }) {
     // No budget cap and no fallback: a silent model switch would break the pin.
     maxBudgetUsd: 0,
     fallbackModel: '',
-    timeoutMs: 300000,
+    timeoutMs,
   })
   return effectiveSettings(normalizeConfig({}), file)
 }

@@ -65,6 +65,10 @@ const zh = {
   roleDesc: '用途说明（何时选它）',
   rolePrompt: '角色提示词（systemPrompt）',
   roleModel: '专属模型（可选）',
+  roleModelAdvisor: '顾问模型（须强于 DSH 主模型）',
+  roleModelAdvisorHint: 'Advisor 是高智能角色。请来的模型必须比干活的 DSH 主模型更强，否则咨询没有意义。请钉死 claude-opus-5。',
+  errAdvisorModel: 'Advisor 必须使用顶级模型（claude-opus-5）',
+  roleTopTierPill: '顶级模型',
   roleFallback: '专属回退模型（可选）',
   roleEffort: '专属推理等级（可选）',
   enabled: '启用',
@@ -107,7 +111,7 @@ const zh = {
   errAllDisabled: '至少启用一个角色',
   errNumberRange: '数值超出允许范围',
   autoTitle: '自动咨询',
-  autoHint: '勾选的角色会在关键节点被主动咨询：政策写入系统提示，必要时催办；每次调用消耗 Claude 订阅额度',
+  autoHint: '勾选的角色会在关键节点被主动咨询：政策写入系统提示，必要时催办；每次调用消耗 Claude 订阅额度。Advisor 只会请比主模型更强的顶级模型（claude-opus-5）。',
   autoCap: '每角色每会话调用上限',
   autoDefaultsHint: '这里是默认勾选集；聊天框开关可按会话临时覆盖',
   acTooltip: '专家咨询 · 自动',
@@ -167,6 +171,10 @@ const en = {
   roleDesc: 'Description (when to pick it)',
   rolePrompt: 'Role system prompt',
   roleModel: 'Dedicated model (optional)',
+  roleModelAdvisor: 'Advisor model (must outrank the DSH manager)',
+  roleModelAdvisorHint: 'Advisor is a high-intelligence role. The advice-giver must be a stronger coding model than the DSH agent doing the work, or the consult is not worth running. Pin claude-opus-5.',
+  errAdvisorModel: 'Advisor needs a top-tier model (claude-opus-5)',
+  roleTopTierPill: 'top-tier model',
   roleFallback: 'Dedicated fallback model (optional)',
   roleEffort: 'Dedicated thinking effort (optional)',
   enabled: 'Enabled',
@@ -209,7 +217,7 @@ const en = {
   errAllDisabled: 'At least one role must stay enabled',
   errNumberRange: 'Value out of range',
   autoTitle: 'Auto consult',
-  autoHint: 'Checked roles are consulted proactively at key points: policy rides the system prompt, with nudges when needed; each call spends Claude subscription quota',
+  autoHint: 'Checked roles are consulted proactively at key points: policy rides the system prompt, with nudges when needed; each call spends Claude subscription quota. Advisor only consults a stronger top-tier model (claude-opus-5).',
   autoCap: 'Per-role calls per session',
   autoDefaultsHint: 'This is the default checked set; the composer toggle overrides it per session',
   acTooltip: 'Expert consult · auto',
@@ -245,6 +253,18 @@ const BUILTIN_DESC_KEYS = {
   advisor: 'builtinDescAdvisor',
   reviewer: 'builtinDescReviewer',
   designer: 'builtinDescDesigner',
+}
+
+/** Keep in sync with lib/consultant-model.js — this bundle cannot import lib/. */
+const TOP_TIER_CONSULTANT_MODELS = ['claude-opus-5']
+const HIGH_INTELLECT_ROLES = new Set(['advisor'])
+
+function roleSlug(name) {
+  return String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
+}
+
+function isHighIntellectRoleName(name) {
+  return HIGH_INTELLECT_ROLES.has(roleSlug(name))
 }
 // Reserved-backend notes are UI copy, so they live in the dictionaries (the
 // host catalog carries no locale); the host note stays as a fallback for ids
@@ -388,25 +408,34 @@ function NumberField({ label, value, onChange, max }) {
  * stored value outside the catalog (set by an older release or by hand)
  * still renders through a passthrough option instead of vanishing.
  */
-function ModelField({ label, value, t, models, onChange }) {
+function ModelField({ label, value, t, models, onChange, allowed, required }) {
   const catalog = models ?? { aliases: [], versioned: [] }
-  const known = new Set(['', ...catalog.aliases, ...catalog.versioned])
+  const allow = Array.isArray(allowed) ? new Set(allowed) : null
+  const aliases = allow ? catalog.aliases.filter((m) => allow.has(m)) : catalog.aliases
+  const versioned = allow ? catalog.versioned.filter((m) => allow.has(m)) : catalog.versioned
+  const known = new Set([...(required ? [] : ['']), ...aliases, ...versioned, ...(allow ? [...allow] : [])])
   const extra = value !== '' && !known.has(value)
-  const opt = (v, label, group) => h('option', { key: `g${group}:${v}`, value: v }, label)
+  const opt = (v, optionLabel, group) => h('option', { key: `g${group}:${v}`, value: v }, optionLabel)
+  const selectValue = required && (value === '' || value == null) && allow && allow.size > 0
+    ? [...allow][0]
+    : value
   return h('div', { className: 'dco-field' },
     h('label', null, label),
     h('select', {
       className: 'dco-input',
       style: { fontFamily: 'var(--dsw-alias-font-mono,monospace)' },
-      value,
+      value: selectValue,
       onChange: (e) => onChange(e.target.value),
     },
-      opt('', t('modelDefault'), 'd'),
+      required ? null : opt('', t('modelDefault'), 'd'),
       extra ? opt(value, `${t('modelCurrent')}: ${value}`, 'x') : null,
-      catalog.aliases.length > 0 ? h('optgroup', { key: 'ga', label: t('modelGroupLatest') },
-        catalog.aliases.map((m) => opt(m, m, 'a'))) : null,
-      catalog.versioned.length > 0 ? h('optgroup', { key: 'gv', label: t('modelGroupVersioned') },
-        catalog.versioned.map((m) => opt(m, m, 'v'))) : null))
+      aliases.length > 0 ? h('optgroup', { key: 'ga', label: t('modelGroupLatest') },
+        aliases.map((m) => opt(m, m, 'a'))) : null,
+      versioned.length > 0 ? h('optgroup', { key: 'gv', label: t('modelGroupVersioned') },
+        versioned.map((m) => opt(m, m, 'v'))) : null,
+      allow && versioned.length === 0 && aliases.length === 0
+        ? [...allow].map((m) => opt(m, m, 't'))
+        : null))
 }
 
 const EFFORT_OPTIONS = [
@@ -444,7 +473,14 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
     if (name.length === 0) { setProblem(t('nameRequired')); return }
     if (names.has(name)) { setProblem(`${t('errDupRole')}: ${name}`); return }
     if (draft.enabled !== false && String(draft.systemPrompt ?? '').trim().length === 0) { setProblem(t('requiredPrompt')); return }
-    onSave({ ...draft, name })
+    const model = isHighIntellectRoleName(name)
+      ? (String(draft.model ?? '').trim() || TOP_TIER_CONSULTANT_MODELS[0])
+      : draft.model
+    if (isHighIntellectRoleName(name) && draft.enabled !== false && !TOP_TIER_CONSULTANT_MODELS.includes(model)) {
+      setProblem(t('errAdvisorModel'))
+      return
+    }
+    onSave({ ...draft, name, model })
   }
 
   return h('div', { className: 'dco-modal-bg', onClick: onClose },
@@ -463,9 +499,19 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
             onChange: (e) => set('systemPrompt')(e.target.value),
           })),
         h('div', { className: 'dco-grid' },
-          h(ModelField, { label: t('roleModel'), value: draft.model ?? '', t, models, onChange: set('model') }),
+          isHighIntellectRoleName(draft.name)
+            ? h(ModelField, {
+              label: t('roleModelAdvisor'),
+              value: draft.model || TOP_TIER_CONSULTANT_MODELS[0],
+              t, models, allowed: TOP_TIER_CONSULTANT_MODELS, required: true,
+              onChange: set('model'),
+            })
+            : h(ModelField, { label: t('roleModel'), value: draft.model ?? '', t, models, onChange: set('model') }),
           h(ModelField, { label: t('roleFallback'), value: draft.fallbackModel ?? '', t, models, onChange: set('fallbackModel') }),
           h(EffortField, { label: t('roleEffort'), value: draft.effort ?? '', t, onChange: set('effort') })),
+        isHighIntellectRoleName(draft.name)
+          ? h('p', { className: 'dco-hint' }, t('roleModelAdvisorHint'))
+          : null,
         problem ? h('div', { className: 'dco-status err' }, problem) : null),
       h('div', { className: 'dco-modal-foot' },
         h('button', { className: 'dco-btn', onClick: onClose }, t('cancel')),
@@ -766,6 +812,10 @@ function Section({ t }) {
       if (draft.roles.every((r) => r.enabled === false)) problems.push(t('errAllDisabled'))
       for (const r of draft.roles) {
         if (r.enabled !== false && String(r.systemPrompt ?? '').trim().length === 0) problems.push(`${t('requiredPrompt')}: ${r.name}`)
+        if (r.enabled !== false && isHighIntellectRoleName(r.name)
+          && !TOP_TIER_CONSULTANT_MODELS.includes(r.model || TOP_TIER_CONSULTANT_MODELS[0])) {
+          problems.push(`${t('errAdvisorModel')}: ${r.name}`)
+        }
       }
     }
     for (const [key, max] of [['timeoutMs', 3600000], ['maxTurns', 3600000], ['maxPanelRoles', 32]]) {
@@ -858,6 +908,7 @@ function Section({ t }) {
         draft.roles.map((role, index) => {
           const meta = []
           if (role.model) meta.push(h('span', { key: 'm', className: 'dco-pill' }, `${t('roleModelPill')}: ${role.model}`))
+          if (isHighIntellectRoleName(role.name)) meta.push(h('span', { key: 'tt', className: 'dco-pill tag' }, t('roleTopTierPill')))
           if (role.fallbackModel) meta.push(h('span', { key: 'f', className: 'dco-pill' }, `${t('roleFallbackPill')}: ${role.fallbackModel}`))
           if (role.effort) meta.push(h('span', { key: 'e', className: 'dco-pill' }, `${t('roleEffortPill')}: ${role.effort}`))
           const descKey = BUILTIN_DESC_KEYS[role.name]

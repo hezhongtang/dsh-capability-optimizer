@@ -33,6 +33,28 @@ test('row-config maxBudgetUsd reaches effective settings when no file exists', (
   assert.equal(effective.maxBudgetUsd, 1.25)
 })
 
+test('an enabled advisor without a model is pinned to claude-opus-5', () => {
+  const ok = validateBackendSettings({ ...defaultBackendSettings(), roles: [oneRole] })
+  assert.equal(ok.ok, true)
+  const advisor = ok.settings.roles.find((role) => role.name === 'advisor')
+  assert.equal(advisor.model, 'claude-opus-5')
+})
+
+test('built-in defaults pin advisor to claude-opus-5 and leave reviewer unset', () => {
+  const roles = defaultBackendSettings().roles
+  assert.equal(roles.find((role) => role.name === 'advisor').model, 'claude-opus-5')
+  assert.equal(roles.find((role) => role.name === 'reviewer').model, '')
+})
+
+test('an enabled advisor on haiku is a field problem, not a silent downgrade', () => {
+  const bad = validateBackendSettings({
+    ...defaultBackendSettings(),
+    roles: [{ ...oneRole, model: 'haiku' }],
+  })
+  assert.equal(bad.ok, false)
+  assert.ok(bad.problems.some((problem) => problem.includes('top-tier')))
+})
+
 test('a refused extraArg does not fail validation or wipe the rest of the document', () => {
   const saved = {
     version: 2,

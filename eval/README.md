@@ -11,6 +11,14 @@ budgets.
 This directory is that harness. It runs real consultations through the shipped
 path and reports every quality number next to the spend that bought it.
 
+**Consultant-layer formal baseline** (layer 1) is pre-registered in
+[`docs/plan/p1-55-consultant-baseline.md`](../docs/plan/p1-55-consultant-baseline.md):
+model `claude-opus-5`, arms `single-max` (effort `max`) vs `panel-3-high`
+(effort `high`), 5 trials, envelope must be 100% before any architecture ranking.
+Advisor is a high-intelligence role and may only consult a top-tier model
+(`claude-opus-5`); a live run that would put it on haiku/sonnet is refused.
+The haiku grid in `results/` is a smoke test, not that baseline.
+
 ## What it measures, and what it cannot
 
 **Measured here** — the *consultant layer*:
@@ -35,21 +43,21 @@ code with the plugin than without it.
 
 | arm | roles | effort | role in the comparison |
 |---|---|---|---|
-| `single-low` | reviewer | low | floor |
-| `single-high` | reviewer | high | compute-matched control |
-| `single-xhigh` | reviewer | xhigh | more compute, still one agent |
-| `panel-3` | reviewer + advisor + designer | low | more agents |
+| `single-max` | reviewer | max | **baseline control** — one deepest pass |
+| `panel-3-high` | reviewer + advisor + designer | high | **baseline treatment** — three shallower passes |
+| `single-low` / `single-high` / `single-xhigh` / `panel-3` / `panel-3-max` | (smoke) | various | optional; not the formal baseline |
 
-`panel-3` against `single-high` / `single-xhigh` is the comparison that matters.
-Reading `panel-3` against `single-low` reproduces exactly the error §5.5 exists
-to prevent.
+The formal contrast is `panel-3-high` against `single-max`. `panel-3-max` is
+not that contrast: it spends more agents and keeps max effort, so a win cannot
+tell those apart.
 
 ## Running it
 
 ```bash
 node eval/run.mjs --dry-run                        # plumbing only, spends nothing
-node eval/run.mjs --model haiku --trials 2         # the full grid
-node eval/run.mjs --arms single-high,panel-3 --tasks session-cache --trials 3
+node eval/run.mjs --model haiku --trials 2         # reviewer-only smoke (not the baseline)
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high \
+  --trials 5 --max-turns 8 --timeout-ms 1200000   # formal layer-1 grid
 ```
 
 Every run writes `results/<timestamp>-<model>.jsonl` (one row per trial, with
