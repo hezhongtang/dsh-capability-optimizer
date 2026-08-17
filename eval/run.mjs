@@ -19,7 +19,7 @@
  *
  * Usage:
  *   node eval/run.mjs --dry-run                 # exercise the plumbing, no quota
- *   node eval/run.mjs --model haiku --trials 2
+ *   node eval/run.mjs --model haiku --arms single-low,single-high --trials 2
  *   node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high --trials 5 --timeout-ms 1200000
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
@@ -32,6 +32,7 @@ import { normalizeConfig } from '../lib/config.js'
 import { ACTIVE_BACKEND } from '../lib/backends.js'
 import { scoreFindings } from './lib/score.mjs'
 import { aggregate } from './lib/aggregate.mjs'
+import { assertConsultantModel } from './lib/consultant-model.mjs'
 
 const HERE = dirname(fileURLToPath(import.meta.url))
 const TASK_DIR = join(HERE, 'tasks')
@@ -53,8 +54,11 @@ const ARMS = {
   'panel-3-max': { roles: ['reviewer', 'advisor', 'designer'], effort: 'max' },
 }
 
+/** Reviewer-only smoke ladder. Default so a bare `--model haiku` cannot put advisor on a weaker model. */
+const SMOKE_ARMS = ['single-low', 'single-high', 'single-xhigh']
+
 function parseArgs(argv) {
-  const args = { model: 'haiku', trials: 2, arms: Object.keys(ARMS), tasks: null, dryRun: false, maxTurns: 6, timeoutMs: 300000 }
+  const args = { model: 'haiku', trials: 2, arms: [...SMOKE_ARMS], tasks: null, dryRun: false, maxTurns: 6, timeoutMs: 300000 }
   for (let index = 0; index < argv.length; index += 1) {
     const flag = argv[index]
     const value = argv[index + 1]
@@ -72,6 +76,9 @@ function parseArgs(argv) {
   if (!Number.isFinite(args.trials) || args.trials < 1) throw new Error('--trials must be >= 1')
   if (!Number.isFinite(args.maxTurns) || args.maxTurns < 1) throw new Error('--max-turns must be >= 1')
   if (!Number.isFinite(args.timeoutMs) || args.timeoutMs < 1000) throw new Error('--timeout-ms must be >= 1000')
+  for (const name of args.arms) {
+    assertConsultantModel(args.model, ARMS[name].roles, { dryRun: args.dryRun })
+  }
   return args
 }
 

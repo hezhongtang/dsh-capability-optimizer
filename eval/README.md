@@ -15,6 +15,8 @@ path and reports every quality number next to the spend that bought it.
 [`docs/plan/p1-55-consultant-baseline.md`](../docs/plan/p1-55-consultant-baseline.md):
 model `claude-opus-5`, arms `single-max` (effort `max`) vs `panel-3-high`
 (effort `high`), 5 trials, envelope must be 100% before any architecture ranking.
+Advisor is a high-intelligence role and may only consult a top-tier model
+(`claude-opus-5`); a live run that would put it on haiku/sonnet is refused.
 The haiku grid in `results/` is a smoke test, not that baseline.
 
 ## What it measures, and what it cannot
@@ -53,7 +55,7 @@ tell those apart.
 
 ```bash
 node eval/run.mjs --dry-run                        # plumbing only, spends nothing
-node eval/run.mjs --model haiku --trials 2         # smoke ladder (not the baseline)
+node eval/run.mjs --model haiku --trials 2         # reviewer-only smoke (not the baseline)
 node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high \
   --trials 5 --max-turns 8 --timeout-ms 1200000   # formal layer-1 grid
 ```

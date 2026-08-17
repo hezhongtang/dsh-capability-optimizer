@@ -21,8 +21,8 @@ harness smoke test. It is not this baseline and must not be pooled with it.
 |---|---|---|
 | Tasks | `session-cache`, `token-verify`, `event-page` as they sit in this commit | Editing a manifest invalidates comparison; add a new id instead |
 | Seeds | 9 defects (4 + 2 + 3) | Fixed vocabulary and line numbers in each `eval/tasks/<id>/manifest.json` |
-| Model | `claude-opus-5` (versioned id, not the floating `opus` alias) | User pin. The alias can drift; the versioned id is the baseline |
-| Effort | `max` on the single arm; `high` on every panel role | The experimental variable. One deep pass vs three shallower ones |
+| Model | `claude-opus-5` (versioned id, not the floating `opus` alias) | Consultant must be a stronger coder than the DSH manager. See §1a |
+| Effort | `max` on the single arm; `high` on every panel role | Thinking budget on the *same* top-tier model, not a capability drop |
 | Fallback | off (`fallbackModel: ''`) | A silent model switch breaks the pin |
 | `maxBudgetUsd` | 0 (unset) | A cap would truncate arms unequally |
 | `maxTurns` | 8 | Product default; max thinking may use the extra tool turns |
@@ -34,6 +34,29 @@ harness smoke test. It is not this baseline and must not be pooled with it.
 | Trials | 5 per (task, arm) | 3 × 2 × 5 = **30 trials**; 60 consultations |
 | Order | task → arm → trial, serial | Current runner; do not parallelise this run |
 | CLI | whatever `claude --version` reports at start, recorded in provenance | Different CLI versions are not comparable |
+
+## 1a. Consultant must outrank the manager
+
+The DSH agent is the one doing the work. A consult is only meaningful when
+the advice-giver has **higher intelligence and coding ability** than that
+manager. Asking a weaker or peer model for a second opinion is not this
+product, and it is not this baseline.
+
+Consequences, pre-registered:
+
+- Formal-grid consultant is `claude-opus-5`. `haiku`, `sonnet`, `fable`, and
+  the floating `opus` alias are not substitutes.
+- **Advisor** is the high-intelligence role. A live run that includes
+  `advisor` and a non-top-tier model is refused by
+  `eval/lib/consultant-model.mjs`. Dry-run plumbing is exempt.
+- Reviewer and designer on the formal panel stay on the same top-tier id
+  (the runner has one `--model` for the grid). Do not build a mixed-capability
+  panel to save money.
+- `--effort high` on the panel is **not** a downgrade of the model. It is
+  less thinking on Opus 5. `--model sonnet` would be the forbidden
+  downgrade.
+- The haiku smoke grid can still exercise reviewer-only arms. It cannot
+  answer the product question and must not be pooled with this baseline.
 
 The intended trade-off is the product question: spend the thinking budget on
 **one deepest pass**, or **split it across three roles at a lower effort**.
@@ -171,3 +194,4 @@ Not allowed: changing README quality copy; defaulting panel; wiring
 - Treating unmatched findings as false positives
 - Mixing haiku (or any other model/effort) rows with this grid
 - Using the floating `opus` alias instead of `claude-opus-5`
+- Putting `advisor` (or the formal panel) on haiku/sonnet “to save quota”
