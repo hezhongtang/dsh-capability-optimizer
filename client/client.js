@@ -114,6 +114,10 @@ const zh = {
   acEmpty: '没有可用的角色',
   acFollowDefaults: '跟随默认配置',
   acOverrideOn: '本会话已覆盖默认',
+  acAttempted: '已发起',
+  acAnswered: '已回答',
+  acFailed: '失败',
+  acCancelled: '已取消',
   tabPlanned: '规划中',
   reservedTitle: '工作区已预留',
   reservedBody: '该 harness 的运行器就绪后，其配置将在此展开；角色体系与咨询工具保持共用。',
@@ -212,6 +216,10 @@ const en = {
   acEmpty: 'No roles available',
   acFollowDefaults: 'Follow defaults',
   acOverrideOn: 'defaults overridden this session',
+  acAttempted: 'attempted',
+  acAnswered: 'answered',
+  acFailed: 'failed',
+  acCancelled: 'cancelled',
   tabPlanned: 'planned',
   reservedTitle: 'Workspace reserved',
   reservedBody: 'Once this harness\'s runner lands, its configuration unfolds here; the role roster and consultation tools stay shared.',
@@ -325,6 +333,8 @@ const CSS = [
   '.dco-ac-name{font-family:var(--dsw-alias-font-mono,monospace);font-weight:600}',
   '.dco-ac-label{opacity:.6;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
   '.dco-ac-usage{margin-left:auto;font-size:10.5px;opacity:.55;flex:none;font-variant-numeric:tabular-nums}',
+  '.dco-ac-usage.warn{opacity:.9}',
+  '.dco-ac-fail{margin-left:4px;color:var(--dsw-alias-danger,rgba(200,60,60,.9))}',
   '.dco-ac-foot{display:flex;align-items:center;justify-content:space-between;gap:8px;border-top:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.2));padding-top:8px}',
   '.dco-ac-ovr{font-size:10px;opacity:.55}',
   '.dco-ac-link{border:none;background:none;color:var(--dsw-alias-accent,#5b4cf0);font:inherit;font-size:11px;cursor:pointer;padding:0}',
@@ -528,6 +538,33 @@ function writeAutoLast(list) {
 }
 
 /**
+ * Per-role budget badge in the roster popover.
+ *
+ * `attempts/cap` is the budget line, but a role that burned its whole budget on
+ * failed consultations used to read exactly like one that spent it on answers.
+ * Failures therefore get their own marker, and the title carries the full
+ * ledger breakdown. Note `attempts` already excludes cancellations: the ledger
+ * refunds an aborted consult, so it is shown for honesty, not arithmetic.
+ *
+ * @param {(key: string) => string} t
+ * @param {{attempts: number, succeeded: number, failed: number, aborted: number}} [tally]
+ * @param {number} attempts - the flat count the popover has always shown.
+ * @param {number} cap
+ */
+function usageBadge(t, tally, attempts, cap) {
+  const failed = tally?.failed ?? 0
+  const title = [
+    `${t('acAttempted')} ${attempts}`,
+    `${t('acAnswered')} ${tally?.succeeded ?? 0}`,
+    `${t('acFailed')} ${failed}`,
+    `${t('acCancelled')} ${tally?.aborted ?? 0}`,
+  ].join(' · ')
+  return h('span', { className: `dco-ac-usage${failed > 0 ? ' warn' : ''}`, title },
+    `${attempts}/${cap}`,
+    failed > 0 ? h('span', { className: 'dco-ac-fail' }, `✗${failed}`) : null)
+}
+
+/**
  * Composer-seat toggle: a rounded text pill opening a roster popover. Every
  * change pushes the session's override to the host (auto-consult runtime);
  * the last selection is remembered locally and re-applied to sessions that
@@ -656,7 +693,7 @@ function AutoConsultControl({ sessionId, t }) {
                 }),
                 h('span', { className: 'dco-ac-name' }, role.name),
                 role.label ? h('span', { className: 'dco-ac-label' }, role.label) : null,
-                h('span', { className: 'dco-ac-usage' }, `${state.session.counts[role.name] ?? 0}/${cap}`))),
+                usageBadge(t, state.session.usage?.[role.name], state.session.counts[role.name] ?? 0, cap))),
           h('div', { className: 'dco-ac-foot' },
             h('span', { className: 'dco-ac-ovr' }, overrideOn ? t('acOverrideOn') : null),
             overrideOn
