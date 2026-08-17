@@ -43,6 +43,20 @@ Where I differ from a naive “finish every P1 bullet”:
 
 Abort vs timeout, extraArgs allowlist, ledger-bound tool path, and `/test` sharing the production consult path remain. Envelope and packet sit on that path; they do not fork it.
 
+## Amended after S1 was measured
+
+Written before the containment work in `docs/plan/s1-consultant-permission-surface.md`.
+One line above needs qualifying: marking the packet's material as
+`UNTRUSTED EVIDENCE` was, at the time this review was written, the *only* thing
+standing between injected instructions and a live tool. Measurement showed the
+consultant was also holding every MCP tool in the user's own config — `--tools`
+governs the built-in set only — which gave a successful injection a network
+egress path and desktop control. `--strict-mcp-config` and a pinned
+`--permission-mode` now close that; the labelling is back to being one layer of
+several rather than the last one.
+
+Nothing here changes the §5.5 conclusion below. Containment is not quality.
+
 ## Bottom line
 
 Ship the P1 *product* surface (envelope, packet, honest triggers, in-flight dedupe). Do not ship a quality claim. The next honest step is still report §5.5, not §5.10.
