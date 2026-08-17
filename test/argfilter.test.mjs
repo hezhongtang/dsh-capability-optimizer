@@ -87,6 +87,27 @@ test('an allowed flag keeps its inline value spelling', () => {
   assert.deepEqual(result.rejected, [])
 })
 
+/**
+ * The runner now applies `--strict-mcp-config` itself whenever the installed
+ * CLI advertises it, because it is what actually bounds the MCP tool surface.
+ * A config copy of it is at best redundant and at worst passed to a CLI that
+ * does not know the flag, so the plugin owns it — same treatment as
+ * `--no-session-persistence`.
+ */
+test('--strict-mcp-config is refused because the runner owns it', () => {
+  const result = filterExtraArgs(['--strict-mcp-config'])
+  assert.deepEqual(result.args, [])
+  assert.equal(result.rejected.length, 1)
+  assert.equal(result.rejected[0].arg, '--strict-mcp-config')
+  assert.match(result.rejected[0].reason, /automatically/)
+})
+
+test('--strict-mcp-config takes no value, so a following token is not swallowed', () => {
+  const result = filterExtraArgs(['--strict-mcp-config', 'stray'])
+  assert.deepEqual(result.args, [])
+  assert.deepEqual(result.rejected.map((entry) => entry.arg), ['--strict-mcp-config', 'stray'])
+})
+
 test('an allowed variadic flag takes every following value', () => {
   const result = filterExtraArgs(['--add-dir', '/a', '/b', '--safe-mode'])
   assert.deepEqual(result.args, ['--add-dir', '/a', '/b', '--safe-mode'])

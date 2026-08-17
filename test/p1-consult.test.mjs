@@ -130,3 +130,73 @@ test('fingerprint dedupe: overlapping identical consults spawn once; a changed d
   assert.equal(spawns, 2, 'a changed context digest must spawn again')
   assert.equal(third.ok, true)
 })
+
+/**
+ * Dedupe joins calls that would produce the same answer. Anything that changes
+ * what the consultant is actually asked has to be in the key, or the second
+ * caller silently receives the first caller's run — reported under its own
+ * `effectiveModel`. `consult_expert` exposes both of these per call.
+ */
+function collectingRunner(field) {
+  const seen = []
+  return {
+    seen,
+    async run(options) {
+      seen.push(options[field] ?? '')
+      await new Promise((resolve) => setTimeout(resolve, 40))
+      return { ok: true, answer: options[field] ?? '(default)', meta: {} }
+    },
+  }
+}
+
+test('fingerprint dedupe: a different model is a different consultation', async () => {
+  const runner = collectingRunner('model')
+  const service = createConsultationService({ settings: makeSettings(), runner: runner.run })
+  const same = { sessionId: 'dedupe-model', question: 'same q', context: 'same material', source: 'tool' }
+
+  const [first, second] = await Promise.all([
+    service.consult(ask({ ...same, model: 'opus' })),
+    service.consult(ask({ ...same, model: 'haiku' })),
+  ])
+
+  assert.deepEqual([...runner.seen].sort(), ['haiku', 'opus'])
+  assert.equal(first.answer, 'opus')
+  assert.equal(second.answer, 'haiku')
+})
+
+test('fingerprint dedupe: a different effort is a different consultation', async () => {
+  const runner = collectingRunner('effort')
+  const service = createConsultationService({ settings: makeSettings(), runner: runner.run })
+  const same = { sessionId: 'dedupe-effort', question: 'same q', context: 'same material', source: 'tool' }
+
+  const [low, high] = await Promise.all([
+    service.consult(ask({ ...same, effort: 'low' })),
+    service.consult(ask({ ...same, effort: 'high' })),
+  ])
+
+  assert.deepEqual([...runner.seen].sort(), ['high', 'low'])
+  assert.equal(low.answer, 'low')
+  assert.equal(high.answer, 'high')
+})
+
+test('fingerprint dedupe: a different objective is a different consultation', async () => {
+  // The auto-consult path fills the packet's objective/constraints sections.
+  // They reach the consultant, so they have to reach the key.
+  const packets = []
+  const runner = async (options) => {
+    packets.push(options.userMessage)
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    return { ok: true, answer: 'seen', meta: {} }
+  }
+  const service = createConsultationService({ settings: makeSettings(), runner })
+  const same = { sessionId: 'dedupe-objective', question: 'same q', context: 'same material', source: 'tool' }
+
+  await Promise.all([
+    service.consult(ask({ ...same, objective: 'ship the migration' })),
+    service.consult(ask({ ...same, objective: 'unblock the release' })),
+  ])
+
+  assert.equal(packets.length, 2, 'a changed objective must not join another run')
+  assert.ok(packets.some((text) => text.includes('ship the migration')))
+  assert.ok(packets.some((text) => text.includes('unblock the release')))
+})
