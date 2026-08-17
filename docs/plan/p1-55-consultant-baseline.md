@@ -6,8 +6,8 @@ baseline.
 
 It answers one question only:
 
-> On these frozen review tasks, does a three-role panel find more seeded
-> defects per dollar than one reviewer given more thinking effort?
+> On these frozen review tasks, at `claude-opus-5` / `--effort max`, does a
+> three-role panel find more seeded defects per dollar than one reviewer?
 
 It does **not** answer whether DSH ships better code with the plugin. That
 is manager-layer §5.5 and is out of scope.
@@ -21,42 +21,46 @@ harness smoke test. It is not this baseline and must not be pooled with it.
 |---|---|---|
 | Tasks | `session-cache`, `token-verify`, `event-page` as they sit in this commit | Editing a manifest invalidates comparison; add a new id instead |
 | Seeds | 9 defects (4 + 2 + 3) | Fixed vocabulary and line numbers in each `eval/tasks/<id>/manifest.json` |
-| Model | `sonnet` (CLI alias, no fallback) | Production consult default; haiku is too cheap/noisy to rank architecture |
+| Model | `claude-opus-5` (versioned id, not the floating `opus` alias) | User pin. The alias can drift; the versioned id is the baseline |
+| Effort | `max` on every consultation | User pin. Effort is no longer an experimental variable |
 | Fallback | off (`fallbackModel: ''`) | A silent model switch breaks the pin |
 | `maxBudgetUsd` | 0 (unset) | A cap would truncate arms unequally |
-| `maxTurns` | 6 | Same as the smoke grid |
+| `maxTurns` | 8 | Product default; max thinking may use the extra tool turns |
+| `timeoutMs` | 1200000 (20 min) | Opus 5 / max will blow the 5 min smoke timeout |
 | Containment | whatever the shipped runner applies | Recorded per row; not an experimental variable |
 | Ledger | none | The session cap is a product guardrail; it must not truncate a trial |
 | Scorer | `eval/lib/score.mjs` after the amendment in §3 | Deterministic; no second model |
-| Arms | `single-low`, `single-high`, `single-xhigh`, `panel-3` | Same as `eval/run.mjs` |
-| Trials | 5 per (task, arm) | 3 × 4 × 5 = **60 trials**; 90 consultations (panel is three roles) |
+| Arms | `single-max`, `panel-3-max` | Same model and effort; panel spends ~3× consultations |
+| Trials | 5 per (task, arm) | 3 × 2 × 5 = **30 trials**; 60 consultations |
 | Order | task → arm → trial, serial | Current runner; do not parallelise this run |
 | CLI | whatever `claude --version` reports at start, recorded in provenance | Different CLI versions are not comparable |
 
-Grid cost is a subscription spend. The haiku smoke was ~$1.27 for 36
-consultations. Sonnet with thinking is typically several times that; budget
-**$15–40** and one to three hours wall-clock. Abort mid-grid is not a
-baseline — finish or discard.
+Effort is pinned, so the old low/high/xhigh ladder is **not** this baseline.
+Compute matching is the dollar: one max-effort reviewer vs three max-effort
+roles. Do not resurrect `single-low` as a control — that would compare
+architecture and effort at once.
+
+Grid cost is a subscription spend. The haiku smoke was ~$1.27 for 36 cheap
+consultations. Sixty Opus 5 / max consultations will be much more; budget
+**$80–250** and several hours wall-clock. Abort mid-grid is not a baseline
+— finish or discard.
 
 ## 2. Arms and the comparison that counts
 
 | Arm | Roles | Effort | Role in the comparison |
 |---|---|---|---|
-| `single-low` | reviewer | low | Floor. Used only to detect “effort does not move the score” |
-| `single-high` | reviewer | high | Compute-matched control |
-| `single-xhigh` | reviewer | xhigh | Stronger single-agent control |
-| `panel-3` | reviewer + advisor + designer | low | Treatment: more agents, not more effort |
+| `single-max` | reviewer | max | Control: one agent at the pinned model and effort |
+| `panel-3-max` | reviewer + advisor + designer | max | Treatment: more agents, same model and effort |
 
-**Primary contrast:** `panel-3` vs the single-agent arm whose mean `costUsd`
-is closest (`single-xhigh` expected). Read `recallPerUsd` first, then
-`recallMean`.
+**Primary contrast:** `panel-3-max` vs `single-max`. Read `recallPerUsd`
+first, then `recallMean`.
 
-**Forbidden contrast:** `panel-3` vs `single-low`. That is the error §5.5
-exists to prevent.
+**Spend check, not a ranking:** `panel-3-max` mean `costUsd` should land
+roughly 2–4× `single-max`. Outside that band, the “three consultations”
+assumption failed — report the ratio, declare the dollar comparison weak.
 
-**Sanity check, not a ranking:** if `single-low.recallMean` >
-`single-high.recallMean`, the grid is too noisy to rank architecture. Report
-the numbers, declare ranking inconclusive, do not promote panel.
+**Forbidden:** ranking panel against any lower-effort single arm, or pooling
+these rows with the haiku smoke grid.
 
 ## 3. Scoring amendment (must land before the formal run)
 
@@ -101,19 +105,21 @@ Do not start the formal grid until §3 is committed and `npm test` is green.
 
 ```bash
 # 1. Plumbing (no quota)
-node eval/run.mjs --dry-run --model sonnet --trials 1
+node eval/run.mjs --dry-run --model claude-opus-5 --arms single-max,panel-3-max --trials 1
 
-# 2. Envelope smoke — one trial, all arms, all tasks (12 consultations)
-node eval/run.mjs --model sonnet --trials 1
+# 2. Envelope smoke — one trial, both arms, all tasks (12 consultations)
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max \
+  --trials 1 --max-turns 8 --timeout-ms 1200000
 
 # 3. Formal grid only if step 2 is 100% envelope ok
-node eval/run.mjs --model sonnet --trials 5
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max \
+  --trials 5 --max-turns 8 --timeout-ms 1200000
 ```
 
 Step 2 is a go/no-go, not part of the baseline. If it degrades, fix or stop
 before spending the grid.
 
-Results land in `eval/results/<iso>-sonnet.jsonl` and `.summary.json`.
+Results land in `eval/results/<iso>-claude-opus-5.jsonl` and `.summary.json`.
 Dry-run files stay gitignored. The formal pair is committed with the
 reading note in §7.
 
@@ -124,18 +130,18 @@ Look at fields in this order:
 1. `meta.cliVersion`, `meta.model`, `meta.pluginVersion` — must match the pins.
 2. Envelope rate (compute from the jsonl if the summary does not print it).
 3. `failureRate` per arm.
-4. `recallPerUsd` for `panel-3` vs the spend-matched single arm.
+4. `recallPerUsd` for `panel-3-max` vs `single-max`.
 5. `recallMean`, `seededPrecisionMean`, `findingCountMean`.
 6. Human pass over `unmatched` in the jsonl — these may be real extra
    defects; they must not be averaged into precision.
 
 Allowed conclusions after a clean grid:
 
-- **Panel is more expensive than it is better:** `panel-3` recall ≥ single
-  control but `recallPerUsd` is clearly lower. Product keeps panel optional.
+- **Panel is more expensive than it is better:** `panel-3-max` recall ≥
+  `single-max` but `recallPerUsd` is clearly lower. Product keeps panel optional.
 - **Panel wins on the matched dollar:** `recallPerUsd` higher *and*
   `recallMean` not worse. Still not a “DSH writes better code” claim.
-- **Inconclusive:** envelope < 100%, or the low/high inversion, or costs
+- **Inconclusive:** envelope < 100%, spend ratio outside 2–4×, or costs
   missing (`costUsd` null must not be treated as free).
 
 Not allowed: changing README quality copy; defaulting panel; wiring
@@ -148,7 +154,7 @@ Not allowed: changing README quality copy; defaulting panel; wiring
 | This protocol | yes |
 | Scoring amendment + tests | yes, before the grid |
 | `eval/README.md` pointer at this protocol and the gates | yes |
-| Formal `<stamp>-sonnet.jsonl` + `.summary.json` | yes |
+| Formal `<stamp>-claude-opus-5.jsonl` + `.summary.json` | yes |
 | `docs/plan/p1-55-consultant-baseline-reading.md` — one page, numbers + the one allowed sentence | yes, after the grid |
 | Amend `docs/plan/p1-review.md` §5.5 paragraph so it no longer says “not run” | yes, after the reading note |
 
@@ -159,4 +165,5 @@ Not allowed: changing README quality copy; defaulting panel; wiring
 - Product changes driven by the numbers
 - Parallelising the runner
 - Treating unmatched findings as false positives
-- Mixing haiku and sonnet rows
+- Mixing haiku (or any other model/effort) rows with this grid
+- Using the floating `opus` alias instead of `claude-opus-5`

@@ -13,9 +13,9 @@ path and reports every quality number next to the spend that bought it.
 
 **Consultant-layer formal baseline** (layer 1) is pre-registered in
 [`docs/plan/p1-55-consultant-baseline.md`](../docs/plan/p1-55-consultant-baseline.md):
-model `sonnet`, 5 trials, envelope must be 100% before any architecture ranking,
-and `panel-3` is never compared to `single-low`. The haiku grid in `results/`
-is a smoke test, not that baseline.
+model `claude-opus-5`, effort `max` on every call, arms `single-max` vs
+`panel-3-max`, 5 trials, envelope must be 100% before any architecture ranking.
+The haiku grid in `results/` is a smoke test, not that baseline.
 
 ## What it measures, and what it cannot
 
@@ -41,21 +41,21 @@ code with the plugin than without it.
 
 | arm | roles | effort | role in the comparison |
 |---|---|---|---|
-| `single-low` | reviewer | low | floor |
-| `single-high` | reviewer | high | compute-matched control |
-| `single-xhigh` | reviewer | xhigh | more compute, still one agent |
-| `panel-3` | reviewer + advisor + designer | low | more agents |
+| `single-max` | reviewer | max | **baseline control** — one agent at the pinned model/effort |
+| `panel-3-max` | reviewer + advisor + designer | max | **baseline treatment** — more agents, same effort |
+| `single-low` / `single-high` / `single-xhigh` / `panel-3` | (smoke ladder) | low–xhigh | optional; not the formal baseline |
 
-`panel-3` against `single-high` / `single-xhigh` is the comparison that matters.
-Reading `panel-3` against `single-low` reproduces exactly the error §5.5 exists
-to prevent.
+The formal contrast is `panel-3-max` against `single-max`. Reading a max-effort
+panel against a cheaper single arm reproduces exactly the error §5.5 exists to
+prevent.
 
 ## Running it
 
 ```bash
 node eval/run.mjs --dry-run                        # plumbing only, spends nothing
-node eval/run.mjs --model haiku --trials 2         # the full grid
-node eval/run.mjs --arms single-high,panel-3 --tasks session-cache --trials 3
+node eval/run.mjs --model haiku --trials 2         # smoke ladder (not the baseline)
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max \
+  --trials 5 --max-turns 8 --timeout-ms 1200000   # formal layer-1 grid
 ```
 
 Every run writes `results/<timestamp>-<model>.jsonl` (one row per trial, with
