@@ -6,8 +6,8 @@ baseline.
 
 It answers one question only:
 
-> On these frozen review tasks, at `claude-opus-5` / `--effort max`, does a
-> three-role panel find more seeded defects per dollar than one reviewer?
+> On these frozen review tasks, at `claude-opus-5`, is one reviewer at
+> `--effort max` more accurate per dollar than three roles at `--effort high`?
 
 It does **not** answer whether DSH ships better code with the plugin. That
 is manager-layer §5.5 and is out of scope.
@@ -22,7 +22,7 @@ harness smoke test. It is not this baseline and must not be pooled with it.
 | Tasks | `session-cache`, `token-verify`, `event-page` as they sit in this commit | Editing a manifest invalidates comparison; add a new id instead |
 | Seeds | 9 defects (4 + 2 + 3) | Fixed vocabulary and line numbers in each `eval/tasks/<id>/manifest.json` |
 | Model | `claude-opus-5` (versioned id, not the floating `opus` alias) | User pin. The alias can drift; the versioned id is the baseline |
-| Effort | `max` on every consultation | User pin. Effort is no longer an experimental variable |
+| Effort | `max` on the single arm; `high` on every panel role | The experimental variable. One deep pass vs three shallower ones |
 | Fallback | off (`fallbackModel: ''`) | A silent model switch breaks the pin |
 | `maxBudgetUsd` | 0 (unset) | A cap would truncate arms unequally |
 | `maxTurns` | 8 | Product default; max thinking may use the extra tool turns |
@@ -30,37 +30,40 @@ harness smoke test. It is not this baseline and must not be pooled with it.
 | Containment | whatever the shipped runner applies | Recorded per row; not an experimental variable |
 | Ledger | none | The session cap is a product guardrail; it must not truncate a trial |
 | Scorer | `eval/lib/score.mjs` after the amendment in §3 | Deterministic; no second model |
-| Arms | `single-max`, `panel-3-max` | Same model and effort; panel spends ~3× consultations |
+| Arms | `single-max`, `panel-3-high` | Same model; effort and agent count trade off |
 | Trials | 5 per (task, arm) | 3 × 2 × 5 = **30 trials**; 60 consultations |
 | Order | task → arm → trial, serial | Current runner; do not parallelise this run |
 | CLI | whatever `claude --version` reports at start, recorded in provenance | Different CLI versions are not comparable |
 
-Effort is pinned, so the old low/high/xhigh ladder is **not** this baseline.
-Compute matching is the dollar: one max-effort reviewer vs three max-effort
-roles. Do not resurrect `single-low` as a control — that would compare
-architecture and effort at once.
+The intended trade-off is the product question: spend the thinking budget on
+**one deepest pass**, or **split it across three roles at a lower effort**.
+Do not run `panel-3-max` as the treatment — that spends more agents *and*
+keeps max effort, so a win cannot tell those apart.
 
-Grid cost is a subscription spend. The haiku smoke was ~$1.27 for 36 cheap
-consultations. Sixty Opus 5 / max consultations will be much more; budget
-**$80–250** and several hours wall-clock. Abort mid-grid is not a baseline
-— finish or discard.
+Grid cost is a subscription spend. Fifteen Opus 5 / max consults plus
+forty-five Opus 5 / high consults will be expensive; budget **$80–250** and
+several hours wall-clock. Abort mid-grid is not a baseline — finish or discard.
 
 ## 2. Arms and the comparison that counts
 
 | Arm | Roles | Effort | Role in the comparison |
 |---|---|---|---|
-| `single-max` | reviewer | max | Control: one agent at the pinned model and effort |
-| `panel-3-max` | reviewer + advisor + designer | max | Treatment: more agents, same model and effort |
+| `single-max` | reviewer | max | Control: one deepest pass |
+| `panel-3-high` | reviewer + advisor + designer | high | Treatment: three shallower passes |
 
-**Primary contrast:** `panel-3-max` vs `single-max`. Read `recallPerUsd`
+**Primary contrast:** `panel-3-high` vs `single-max`. Read `recallPerUsd`
 first, then `recallMean`.
 
-**Spend check, not a ranking:** `panel-3-max` mean `costUsd` should land
-roughly 2–4× `single-max`. Outside that band, the “three consultations”
-assumption failed — report the ratio, declare the dollar comparison weak.
+**Spend check:** record `costUsdMean(panel-3-high) / costUsdMean(single-max)`.
+The hypothesis is that three `high` passes sit in the same spend band as one
+`max` pass. If the ratio is **> 3**, the panel is just a more expensive
+configuration — say so, and do not treat a recall win as a compute-matched
+result. A ratio **< 0.5** means the panel was cheaper; a recall loss then
+still answers the product question (splitting did not pay).
 
-**Forbidden:** ranking panel against any lower-effort single arm, or pooling
-these rows with the haiku smoke grid.
+**Forbidden:** `panel-3-max` vs `single-max` as the formal ranking (same
+effort, 3× agents). Also forbidden: pooling these rows with the haiku smoke
+grid.
 
 ## 3. Scoring amendment (must land before the formal run)
 
@@ -105,14 +108,14 @@ Do not start the formal grid until §3 is committed and `npm test` is green.
 
 ```bash
 # 1. Plumbing (no quota)
-node eval/run.mjs --dry-run --model claude-opus-5 --arms single-max,panel-3-max --trials 1
+node eval/run.mjs --dry-run --model claude-opus-5 --arms single-max,panel-3-high --trials 1
 
 # 2. Envelope smoke — one trial, both arms, all tasks (12 consultations)
-node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max \
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high \
   --trials 1 --max-turns 8 --timeout-ms 1200000
 
 # 3. Formal grid only if step 2 is 100% envelope ok
-node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max \
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high \
   --trials 5 --max-turns 8 --timeout-ms 1200000
 ```
 
@@ -130,19 +133,20 @@ Look at fields in this order:
 1. `meta.cliVersion`, `meta.model`, `meta.pluginVersion` — must match the pins.
 2. Envelope rate (compute from the jsonl if the summary does not print it).
 3. `failureRate` per arm.
-4. `recallPerUsd` for `panel-3-max` vs `single-max`.
+4. `recallPerUsd` for `panel-3-high` vs `single-max`, plus the spend ratio.
 5. `recallMean`, `seededPrecisionMean`, `findingCountMean`.
 6. Human pass over `unmatched` in the jsonl — these may be real extra
    defects; they must not be averaged into precision.
 
 Allowed conclusions after a clean grid:
 
-- **Panel is more expensive than it is better:** `panel-3-max` recall ≥
-  `single-max` but `recallPerUsd` is clearly lower. Product keeps panel optional.
-- **Panel wins on the matched dollar:** `recallPerUsd` higher *and*
-  `recallMean` not worse. Still not a “DSH writes better code” claim.
-- **Inconclusive:** envelope < 100%, spend ratio outside 2–4×, or costs
-  missing (`costUsd` null must not be treated as free).
+- **One deep pass wins:** `single-max` `recallPerUsd` higher, or equal
+  recall at lower spend. Default product stays one reviewer, not a panel.
+- **Splitting wins on the matched dollar:** `panel-3-high` `recallPerUsd`
+  higher *and* `recallMean` not worse, with spend ratio ≤ 3. Still not a
+  “DSH writes better code” claim.
+- **Inconclusive:** envelope < 100%, spend ratio > 3 with a panel recall
+  win, or costs missing (`costUsd` null must not be treated as free).
 
 Not allowed: changing README quality copy; defaulting panel; wiring
 `required`; starting §5.10.

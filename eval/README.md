@@ -13,8 +13,8 @@ path and reports every quality number next to the spend that bought it.
 
 **Consultant-layer formal baseline** (layer 1) is pre-registered in
 [`docs/plan/p1-55-consultant-baseline.md`](../docs/plan/p1-55-consultant-baseline.md):
-model `claude-opus-5`, effort `max` on every call, arms `single-max` vs
-`panel-3-max`, 5 trials, envelope must be 100% before any architecture ranking.
+model `claude-opus-5`, arms `single-max` (effort `max`) vs `panel-3-high`
+(effort `high`), 5 trials, envelope must be 100% before any architecture ranking.
 The haiku grid in `results/` is a smoke test, not that baseline.
 
 ## What it measures, and what it cannot
@@ -41,20 +41,20 @@ code with the plugin than without it.
 
 | arm | roles | effort | role in the comparison |
 |---|---|---|---|
-| `single-max` | reviewer | max | **baseline control** — one agent at the pinned model/effort |
-| `panel-3-max` | reviewer + advisor + designer | max | **baseline treatment** — more agents, same effort |
-| `single-low` / `single-high` / `single-xhigh` / `panel-3` | (smoke ladder) | low–xhigh | optional; not the formal baseline |
+| `single-max` | reviewer | max | **baseline control** — one deepest pass |
+| `panel-3-high` | reviewer + advisor + designer | high | **baseline treatment** — three shallower passes |
+| `single-low` / `single-high` / `single-xhigh` / `panel-3` / `panel-3-max` | (smoke) | various | optional; not the formal baseline |
 
-The formal contrast is `panel-3-max` against `single-max`. Reading a max-effort
-panel against a cheaper single arm reproduces exactly the error §5.5 exists to
-prevent.
+The formal contrast is `panel-3-high` against `single-max`. `panel-3-max` is
+not that contrast: it spends more agents and keeps max effort, so a win cannot
+tell those apart.
 
 ## Running it
 
 ```bash
 node eval/run.mjs --dry-run                        # plumbing only, spends nothing
 node eval/run.mjs --model haiku --trials 2         # smoke ladder (not the baseline)
-node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max \
+node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high \
   --trials 5 --max-turns 8 --timeout-ms 1200000   # formal layer-1 grid
 ```
 

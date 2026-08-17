@@ -20,7 +20,7 @@
  * Usage:
  *   node eval/run.mjs --dry-run                 # exercise the plumbing, no quota
  *   node eval/run.mjs --model haiku --trials 2
- *   node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-max --trials 5 --timeout-ms 1200000
+ *   node eval/run.mjs --model claude-opus-5 --arms single-max,panel-3-high --trials 5 --timeout-ms 1200000
  */
 import { readFileSync, readdirSync, writeFileSync, mkdirSync, existsSync } from 'node:fs'
 import { join, dirname } from 'node:path'
@@ -39,10 +39,9 @@ const RESULT_DIR = join(HERE, 'results')
 
 /**
  * Matched arms. The consultant-layer baseline (docs/plan/p1-55-consultant-baseline.md)
- * is `single-max` vs `panel-3-max` at `claude-opus-5`. The low/high/xhigh
- * ladder is kept for optional smoke grids only — it is not that baseline.
- * Reading a max-effort panel against a low-effort single arm would reproduce
- * exactly the error §5.5 exists to prevent.
+ * is `single-max` vs `panel-3-high` at `claude-opus-5`: one deepest pass
+ * against three shallower ones. The low/high/xhigh ladder and `panel-3-max`
+ * are kept for optional smoke grids only — they are not that baseline.
  */
 const ARMS = {
   'single-low': { roles: ['reviewer'], effort: 'low' },
@@ -50,6 +49,7 @@ const ARMS = {
   'single-xhigh': { roles: ['reviewer'], effort: 'xhigh' },
   'single-max': { roles: ['reviewer'], effort: 'max' },
   'panel-3': { roles: ['reviewer', 'advisor', 'designer'], effort: 'low' },
+  'panel-3-high': { roles: ['reviewer', 'advisor', 'designer'], effort: 'high' },
   'panel-3-max': { roles: ['reviewer', 'advisor', 'designer'], effort: 'max' },
 }
 
