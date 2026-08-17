@@ -153,11 +153,16 @@ Options:
                                   built-in set
   --setting-sources <sources>     Comma-separated list of setting sources to load
                                   (user, project, local)
+  --strict-mcp-config             Only use MCP servers from --mcp-config,
+                                  ignoring all other MCP configurations
   --allowedTools, --allowed-tools <tools...>
                                   Tools allowed without prompting
   --disallowedTools, --disallowed-tools <tools...>
                                   Tools denied
-  --permission-mode <mode>        Permission mode
+  --permission-mode <mode>        Permission mode to use for the session
+                                  (choices: "acceptEdits", "auto",
+                                  "bypassPermissions", "manual", "dontAsk",
+                                  "plan")
   --dangerously-skip-permissions  Bypass all permission checks
   -h, --help                      Display help
 `

@@ -71,6 +71,12 @@ Options:
   --disallowedTools, --disallowed-tools <tools...>  Tools denied
   --tools <tools...>              Specify the list of available tools
   --setting-sources <sources>     Comma-separated list of setting sources to load (user, project, local)
+  --strict-mcp-config             Only use MCP servers from --mcp-config,
+                                  ignoring all other MCP configurations
+  --permission-mode <mode>        Permission mode to use for the session
+                                  (choices: "acceptEdits", "auto",
+                                  "bypassPermissions", "manual", "dontAsk",
+                                  "plan")
   --json-schema <schema>          Validate output against a JSON schema
   -h, --help                      Display help for command
 `
@@ -115,8 +121,114 @@ test("the stub's default help matches the installed CLI's flag surface", async (
   // CLI has, every "safe defaults are applied" assertion silently goes vacuous.
   const capabilities = await probeCliCapabilities(fakeClaudePath)
   assert.deepEqual(capabilities, {
-    tools: true, noSessionPersistence: true, maxBudgetUsd: true, settingSources: true, jsonSchema: true, probed: true,
+    tools: true,
+    noSessionPersistence: true,
+    maxBudgetUsd: true,
+    settingSources: true,
+    jsonSchema: true,
+    strictMcpConfig: true,
+    permissionModes: ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan'],
+    probed: true,
   })
+})
+
+/**
+ * `--tools` restricts the *built-in* set only. Empirically (CLI 2.1.233) a
+ * consultation launched with `--tools Read,Grep,Glob` still receives every
+ * MCP tool the user's own config contributes — browser automation, desktop
+ * control, arbitrary network fetches — because MCP tools are not built-ins.
+ * `--strict-mcp-config` with no `--mcp-config` is what actually empties that
+ * surface; see docs/plan/s1-consultant-permission-surface.md.
+ */
+test('an advertised --strict-mcp-config is passed: --tools alone does not bound MCP tools', async () => {
+  freshProbe()
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: MODERN_HELP }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  assert.ok(record.argv.includes('--strict-mcp-config'),
+    'a CLI that advertises --strict-mcp-config must receive it, or the consultant keeps the user MCP tool surface')
+  assert.ok(!record.argv.includes('--mcp-config'), 'no MCP server may be re-added by us')
+  assert.equal(value.meta.strictMcp, true)
+})
+
+/**
+ * A settings file can set `permissions.defaultMode`. Unlike `permissions.allow`
+ * that is NOT gated by workspace trust, so an untrusted project can still put
+ * the consultant into `bypassPermissions` and get real shell execution. The
+ * flag beats every settings source, including `--settings`, so it is the only
+ * lever that does not depend on which sources are loaded.
+ */
+test('an advertised --permission-mode is pinned so a settings file cannot escalate the consultant', async () => {
+  freshProbe()
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: MODERN_HELP }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  const flag = record.argv.indexOf('--permission-mode')
+  assert.notEqual(flag, -1, 'a CLI that advertises --permission-mode must receive it')
+  assert.equal(record.argv[flag + 1], 'manual')
+  assert.equal(value.meta.permissionMode, 'manual')
+})
+
+test('the pinned permission mode is only ever a mode the installed CLI advertises', async () => {
+  freshProbe()
+  // An older CLI whose vocabulary is `default`, not `manual`. Passing a value
+  // outside the advertised choices would fail the whole invocation.
+  const legacyHelp = `Options:
+  -p, --print                 Print response and exit
+  --output-format <format>    Output format
+  --permission-mode <mode>    Permission mode to use for the session (choices:
+                              "acceptEdits", "bypassPermissions", "default", "plan")
+  -h, --help                  Display help
+`
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: legacyHelp }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  const flag = record.argv.indexOf('--permission-mode')
+  assert.notEqual(flag, -1)
+  assert.equal(record.argv[flag + 1], 'default')
+})
+
+test('a --permission-mode with no advertised choices is skipped rather than guessed', async () => {
+  freshProbe()
+  // The flag exists but its vocabulary is unknown. Guessing a value risks
+  // failing the whole run, which turns a hardening step into an outage.
+  const opaqueHelp = `Options:
+  -p, --print               Print response and exit
+  --output-format <format>  Output format
+  --permission-mode <mode>  Permission mode
+  -h, --help                Display help
+`
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: opaqueHelp }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  assert.ok(!record.argv.includes('--permission-mode'))
+  assert.equal(value.meta.permissionMode, undefined)
+})
+
+test('a CLI advertising neither hardening flag still runs, and says so in meta', async () => {
+  freshProbe()
+  const oldHelp = `Options:
+  -p, --print               Print response and exit
+  --output-format <format>  Output format
+  -h, --help                Display help
+`
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: oldHelp }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true, 'an old CLI must still produce an answer')
+  assert.ok(!record.argv.includes('--strict-mcp-config'))
+  assert.ok(!record.argv.includes('--permission-mode'))
+  assert.equal(value.meta.strictMcp, undefined)
+  assert.equal(value.meta.permissionMode, undefined)
 })
 
 test('the tool probe is not fooled by --allowedTools / --disallowed-tools', async () => {

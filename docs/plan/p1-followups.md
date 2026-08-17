@@ -31,10 +31,37 @@ repo being consulted). An older CLI that does not advertise the flag skips it.
 failure mode — every tool a future CLI ships is permitted until someone remembers to
 extend the list, so it fails *open*. `--tools` is an allowlist and is self-maintaining.
 
-**Verification status:** the flag is feature-detected and passed in argv when
-advertised. The settings-vs-flag *precedence* (deny-over-allow ordering) is
-documented Claude Code behaviour but was **not** empirically tested here. Test it
-against a real CLI before treating the hole as closed on every install.
+**Verification status: closed, and the finding above is superseded.** It was
+measured against CLI 2.1.233 — see `docs/plan/s1-consultant-permission-surface.md`
+for the full method and result tables, and `test/live-cli.test.mjs`
+(`DCO_LIVE_CLI=1 npm test`) to re-run the shipped-containment arms.
+
+Three corrections to what is written above:
+
+1. **`permissions.allow` is gated by workspace trust.** In an untrusted
+   workspace the CLI ignores those entries outright and says so on stderr. The
+   escalation this section describes is real only in a workspace the user has
+   already trusted — which, for the repo they work in daily, it will be.
+2. **The bigger lever is `permissions.defaultMode`, which is gated by nothing.**
+   The same project settings file, in an *untrusted* workspace, moved a
+   consultation into `acceptEdits` (file writes) and `bypassPermissions`
+   (arbitrary shell execution, zero denials). `--setting-sources user` closes it;
+   so does `--tools`; so does a pinned `--permission-mode`, which is the only one
+   of the three that also covers the `user` source we still load.
+3. **`--tools` never bounded MCP tools.** It selects from the *built-in* set, so
+   a consultation kept every MCP server in the user's own config — on the machine
+   under test, 45 tools including browser automation with arbitrary JS
+   evaluation, arbitrary outbound requests, and desktop input control. Given the
+   packet deliberately carries `UNTRUSTED EVIDENCE`, that was an injection
+   egress path. `--strict-mcp-config` reduces the surface to exactly
+   `Read, Grep, Glob`.
+
+`lib/claude.js` now passes all five flags through one `consultContainmentArgs()`
+seam, each on feature detection, and records what was applied in
+`meta.tools` / `meta.strictMcp` / `meta.permissionMode`.
+
+Still unrun: the trusted-workspace `permissions.allow` arm, which would require
+writing a trust entry into the user's real `~/.claude.json`.
 
 ## S2 — `maxBudgetUsd` reaches the CLI but nothing else
 

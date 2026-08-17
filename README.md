@@ -120,7 +120,7 @@ Example — a security-focused custom role:
 ## How a consultation runs
 
 - One `claude -p` process per consultation; the question (plus optional material) goes in via **stdin**, the role persona via `--append-system-prompt`, the reply comes back as one JSON document.
-- The headless session is restricted to Read/Grep/Glob when the installed CLI advertises `--tools`. Permission-widening `extraArgs` never reach argv. Caller cancellation (`AbortSignal`) and the wall-clock timeout stay distinguishable.
+- The headless session is contained by five feature-detected flags: `--tools Read,Grep,Glob` (built-in tools), `--strict-mcp-config` (MCP tools, which `--tools` does not govern), `--setting-sources user` (drops the consulted repo's own settings), a pinned `--permission-mode` (outranks `permissions.defaultMode` from any settings source) and `--no-session-persistence`. Permission-widening `extraArgs` never reach argv. Caller cancellation (`AbortSignal`) and the wall-clock timeout stay distinguishable.
 - Wall-clock timeout (default 5 min) with SIGTERM → SIGKILL escalation; `--max-turns` (default 8) caps agentic turns inside the CLI.
 - Every reply carries a shared framing for Claude — *this is a reference answer another agent will weigh* — so even custom roles inherit the "advice, not orders" contract.
 
@@ -128,7 +128,7 @@ Example — a security-focused custom role:
 
 **What the plugin guarantees:**
 
-- The plugin never passes `--dangerously-skip-permissions` or any permission-bypassing flag. `extraArgs` is an allowlist, not a passthrough. When the installed CLI advertises `--tools`, the consultation is restricted to Read, Grep and Glob.
+- The plugin never passes `--dangerously-skip-permissions` or any permission-bypassing flag. `extraArgs` is an allowlist, not a passthrough. On a CLI that advertises the flags, a consultation gets exactly `Read`, `Grep`, `Glob` and no MCP server — verified against a real CLI, including against a project whose own `.claude/settings.json` asks for `bypassPermissions` ([evidence](docs/plan/s1-consultant-permission-surface.md), reproducible with `DCO_LIVE_CLI=1 npm test`). Each flag is feature-detected, so a CLI too old to advertise them degrades rather than failing; `meta.tools` / `meta.strictMcp` / `meta.permissionMode` report what was actually enforced.
 - Prompts travel as argv/stdin to the local CLI only — the plugin itself adds no third-party service, no telemetry, no credential storage. Routes enforce same-origin; the settings file is 0600 and atomically written; subprocess output is size-capped and timeouts always reap the child.
 - Claude's reply is returned to the DSH agent as tool-result **data**, framed as a reference answer to weigh ("advice, not orders"), never as an instruction channel.
 

@@ -120,7 +120,7 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 ## 一次咨询如何运行
 
 - 每次咨询一个 `claude -p` 进程；问题（及可选材料）经 **stdin** 送入，角色人设经 `--append-system-prompt` 注入，回复以单个 JSON 文档返回。
-- 当已安装的 CLI 声明了 `--tools` 时，headless 会话被限制为 Read/Grep/Glob。会扩大权限的 `extraArgs` 到不了 argv。调用方取消（`AbortSignal`）与墙钟超时分开回报。
+- headless 会话由五个特性探测后才传的标志共同收敛：`--tools Read,Grep,Glob`（内置工具）、`--strict-mcp-config`（MCP 工具——`--tools` 管不到它们）、`--setting-sources user`（丢弃被咨询仓库自己的设置）、固定的 `--permission-mode`（压过任何设置来源里的 `permissions.defaultMode`）以及 `--no-session-persistence`。会扩大权限的 `extraArgs` 到不了 argv。调用方取消（`AbortSignal`）与墙钟超时分开回报。
 - 墙钟超时（默认 5 分钟）SIGTERM → SIGKILL 递进；`--max-turns`（默认 8）限制 CLI 内部的代理轮数。
 - 每次回复都带有给 Claude 的共同框架——*这是另一个 agent 将要权衡的参考答案*——自定义角色同样继承“建议而非命令”的契约。
 
@@ -128,7 +128,7 @@ agent 选择角色、把材料打包进 context，调用 `consult_expert`。Clau
 
 **插件保证的部分：**
 
-- 绝不传 `--dangerously-skip-permissions` 等绕过权限的标志。`extraArgs` 是允许清单，不是原样透传。当已安装的 CLI 声明了 `--tools` 时，咨询被限制为 Read、Grep、Glob。
+- 绝不传 `--dangerously-skip-permissions` 等绕过权限的标志。`extraArgs` 是允许清单，不是原样透传。在声明了这些标志的 CLI 上，一次咨询拿到的正好是 `Read`、`Grep`、`Glob`，且没有任何 MCP server——这一点已在真实 CLI 上验证过，包括面对一个自己的 `.claude/settings.json` 就要 `bypassPermissions` 的项目（[证据](docs/plan/s1-consultant-permission-surface.md)，用 `DCO_LIVE_CLI=1 npm test` 可复现）。每个标志都先特性探测，太旧的 CLI 只会降级而不是整体失败；`meta.tools` / `meta.strictMcp` / `meta.permissionMode` 如实回报实际生效了什么。
 - 提示词只经 argv/stdin 到达本地 CLI——插件自身不引入第三方服务、无遥测、不存凭据。路由强制同源（same-origin）；设置文件 0600 权限原子写入；子进程输出有大小上限，超时必定回收。
 - Claude 的回复以工具结果**数据**的形式返回给 DSH agent，并被框定为供权衡的参考答案（"建议而非命令"），不构成指令通道。
 
