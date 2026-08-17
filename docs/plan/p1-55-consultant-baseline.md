@@ -46,9 +46,11 @@ Consequences, pre-registered:
 
 - Formal-grid consultant is `claude-opus-5`. `haiku`, `sonnet`, `fable`, and
   the floating `opus` alias are not substitutes.
-- **Advisor** is the high-intelligence role. A live run that includes
+- **Advisor** is the high-intelligence role. Settings defaults it to
+  `claude-opus-5`, the roster marks it as top-tier, and a save that would
+  put it on haiku/sonnet is refused. A live eval run that includes
   `advisor` and a non-top-tier model is refused by
-  `eval/lib/consultant-model.mjs`. Dry-run plumbing is exempt.
+  `lib/consultant-model.js`. Dry-run plumbing is exempt.
 - Reviewer and designer on the formal panel stay on the same top-tier id
   (the runner has one `--model` for the grid). Do not build a mixed-capability
   panel to save money.

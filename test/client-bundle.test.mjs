@@ -103,6 +103,17 @@ test('the zh and en dictionaries define exactly the same keys', () => {
  * difference since P0 (`attempts` / `succeeded` / `failed` / `aborted`); the
  * composer popover needs the words to say it.
  */
+test('settings copy names the advisor top-tier model pin in both locales', () => {
+  const { dictionaries } = applyClient()
+  for (const locale of ['zh', 'en']) {
+    for (const key of ['roleModelAdvisor', 'roleModelAdvisorHint', 'errAdvisorModel', 'roleTopTierPill']) {
+      assert.equal(typeof dictionaries[locale][key], 'string', `${locale}.${key} must exist`)
+      assert.ok(dictionaries[locale][key].length > 0, `${locale}.${key} must not be empty`)
+    }
+    assert.match(dictionaries[locale].roleModelAdvisorHint, /claude-opus-5/)
+  }
+})
+
 test('the composer popover has localized words for the whole ledger breakdown', () => {
   const { dictionaries } = applyClient()
 

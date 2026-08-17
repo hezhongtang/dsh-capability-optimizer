@@ -1,6 +1,6 @@
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { assertConsultantModel, TOP_TIER_CONSULTANT_MODELS } from '../eval/lib/consultant-model.mjs'
+import { assertConsultantModel, TOP_TIER_CONSULTANT_MODELS } from '../lib/consultant-model.js'
 
 test('advisor on claude-opus-5 is allowed', () => {
   assert.doesNotThrow(() => assertConsultantModel('claude-opus-5', ['advisor', 'reviewer']))
