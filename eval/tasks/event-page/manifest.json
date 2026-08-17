@@ -1,0 +1,26 @@
+{
+  "id": "event-page",
+  "title": "Paged event listing for the admin console",
+  "question": "Review src/events.js as a change about to ship. Report concrete defects: what breaks, where, and the minimal fix. Ground every finding in the code you can read.",
+  "files": ["src/events.js"],
+  "bugs": [
+    {
+      "id": "sql-injection",
+      "file": "src/events.js",
+      "line": 14,
+      "keywords": ["injection", "inject", "parameteriz", "sanitiz", "escape", "bind", "prepared", "interpolat"]
+    },
+    {
+      "id": "unbounded-limit",
+      "file": "src/events.js",
+      "line": 7,
+      "keywords": ["unbounded", "clamp", "cap the", "maximum", "max limit", "denial", "dos", "huge", "arbitrarily large"]
+    },
+    {
+      "id": "unvalidated-numbers",
+      "file": "src/events.js",
+      "line": 8,
+      "keywords": ["nan", "not a number", "negative", "isnan", "integer", "non-numeric"]
+    }
+  ]
+}

@@ -1,0 +1,32 @@
+{
+  "id": "session-cache",
+  "title": "Session cache in front of the session store",
+  "question": "Review src/cache.js as a change about to ship. Report concrete defects: what breaks, where, and the minimal fix. Ground every finding in the code you can read.",
+  "files": ["src/cache.js"],
+  "bugs": [
+    {
+      "id": "unbounded-growth",
+      "file": "src/cache.js",
+      "line": 22,
+      "keywords": ["unbounded", "evict", "eviction", "grows", "growth", "memory", "leak", "lru", "no limit", "no bound", "size limit"]
+    },
+    {
+      "id": "failed-load-never-cleared",
+      "file": "src/cache.js",
+      "line": 25,
+      "keywords": ["reject", "rejection", "catch", "error path", "fails", "failure", "never removed", "never deleted", "stuck", "poison"]
+    },
+    {
+      "id": "invalidate-ignores-inflight",
+      "file": "src/cache.js",
+      "line": 31,
+      "keywords": ["inflight", "in-flight", "invalidate", "stale", "repopulat", "race"]
+    },
+    {
+      "id": "warm-floats-promises",
+      "file": "src/cache.js",
+      "line": 35,
+      "keywords": ["unhandled", "floating", "not awaited", "no await", "swallow", "warm"]
+    }
+  ]
+}

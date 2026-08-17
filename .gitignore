@@ -2,3 +2,6 @@ node_modules/
 .DS_Store
 *.log
 .npmrc
+
+# dry-run output is plumbing noise, not evidence
+eval/results/*-dryrun.*

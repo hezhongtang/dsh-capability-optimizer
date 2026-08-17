@@ -1,0 +1,20 @@
+{
+  "id": "token-verify",
+  "title": "HMAC token verification for a public ingest endpoint",
+  "question": "Review src/verify.js as a change about to ship. Report concrete defects: what breaks, where, and the minimal fix. Ground every finding in the code you can read.",
+  "files": ["src/verify.js"],
+  "bugs": [
+    {
+      "id": "fail-open-catch",
+      "file": "src/verify.js",
+      "line": 22,
+      "keywords": ["fail open", "fail-open", "catch", "swallow", "authenticat", "anonymous", "bypass", "grants", "returns ok"]
+    },
+    {
+      "id": "timing-unsafe-compare",
+      "file": "src/verify.js",
+      "line": 17,
+      "keywords": ["timing", "constant-time", "constant time", "timingsafeequal", "side channel", "side-channel", "early exit"]
+    }
+  ]
+}
