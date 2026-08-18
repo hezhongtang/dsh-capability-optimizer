@@ -1,5 +1,10 @@
 # P1 implementation review
 
+> **Historical / superseded 2026-08-18.** In particular, `required` never had a
+> host pre-execute enforcement seam, and the panel evaluation mixed incompatible
+> role outputs. Current behavior and evaluation are specified in
+> [`p2-role-contract-optimization.md`](p2-role-contract-optimization.md).
+
 Review of the work against `docs/research/model-consultation-patterns.md` §5.5–5.11
 and 2026 public evidence. Written after the product changes landed, not as a
 second spec.

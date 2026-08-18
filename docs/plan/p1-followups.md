@@ -1,5 +1,9 @@
 # Carried forward from the P0 work
 
+> **Historical / partially superseded 2026-08-18.** Role contracts,
+> `hard-remind`, and the current prompt experiment are governed by
+> [`p2-role-contract-optimization.md`](p2-role-contract-optimization.md).
+
 Findings surfaced while implementing `docs/plan/p0-contracts.md` that are real but
 out of P0 scope. Recorded so they are not lost; none of them block the P0 release.
 

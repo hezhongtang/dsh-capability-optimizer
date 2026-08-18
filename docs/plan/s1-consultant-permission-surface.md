@@ -1,5 +1,14 @@
 # S1, measured: what a headless consultation can actually do
 
+> **2026-08-18 hardening addendum.** Claude Code 2.1.234 advertises
+> `--safe-mode`: it disables user/project CLAUDE.md, skills, plugins, hooks,
+> MCP, and auto-memory while explicitly preserving authentication, model
+> selection, built-in tools, and permissions. The runner now applies it when
+> advertised, in addition to the independently measured controls below. This
+> closes the user-settings hook/instruction channel that `--setting-sources
+> user` intentionally retained. The installed flag surface and argv plumbing
+> are deterministically tested; the paid live containment tests remain opt-in.
+
 `docs/plan/p1-followups.md` S1 recorded a hypothesis — a project's own
 `.claude/settings.json` can pre-approve tools inside a consultation — and shipped
 `--setting-sources user` against it, while noting the precedence was **not**
@@ -119,6 +128,7 @@ detection:
 
 | flag | closes |
 |---|---|
+| `--safe-mode` | user/project instructions, skills, plugins, hooks, MCP, and memory (current CLIs) |
 | `--tools Read,Grep,Glob` | the built-in write/exec surface |
 | `--strict-mcp-config` | the MCP surface, which `--tools` does not govern |
 | `--setting-sources user` | project/local settings of the repo under consultation |

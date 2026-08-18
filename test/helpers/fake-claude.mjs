@@ -14,6 +14,7 @@
  *   FAKE_CLAUDE_STDERR    text written to stderr before exiting
  *   FAKE_CLAUDE_RECORD    path to write { argv, stdin, pid, env } as JSON
  *   FAKE_CLAUDE_HELP      text printed for `--help` (feature-probe fixture)
+ *   FAKE_CLAUDE_MODELS    comma-separated modelUsage keys for metadata tests
  *
  * Modes:
  *   ok       one well-formed JSON result document, exit 0
@@ -123,6 +124,15 @@ function doc(overrides) {
     total_cost_usd: 0.0042,
     ...overrides,
   }
+  const models = typeof process.env.FAKE_CLAUDE_MODELS === 'string'
+    ? process.env.FAKE_CLAUDE_MODELS.split(',').map((model) => model.trim()).filter(Boolean)
+    : []
+  const model = process.env.FAKE_CLAUDE_MODEL
+  if (models.length > 0) {
+    out.modelUsage = Object.fromEntries(models.map((entry) => [entry, { canonicalModel: entry }]))
+  } else if (typeof model === 'string' && model.length > 0) {
+    out.modelUsage = { [model]: { canonicalModel: model } }
+  }
   const structured = process.env.FAKE_CLAUDE_STRUCTURED
   if (structured !== undefined && structured.length > 0 && out.structured_output === undefined) {
     try {
@@ -153,6 +163,7 @@ Options:
                                   built-in set
   --setting-sources <sources>     Comma-separated list of setting sources to load
                                   (user, project, local)
+  --safe-mode                     Disable customizations while preserving auth
   --strict-mcp-config             Only use MCP servers from --mcp-config,
                                   ignoring all other MCP configurations
   --allowedTools, --allowed-tools <tools...>

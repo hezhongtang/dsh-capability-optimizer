@@ -72,6 +72,23 @@ test('a finding with no line still matches on file plus vocabulary', () => {
   assert.equal(result.recall, 1)
 })
 
+test('a line-only location maps to the sole seeded file, but never guesses across files', () => {
+  const oneFile = scoreFindings([finding({ location: 'Line 42' })], [BUG], { files: ['src/cache.js'] })
+  assert.equal(oneFile.recall, 1)
+
+  const other = { id: 'other', file: 'src/other.js', line: 42, keywords: ['unbounded'] }
+  const manyFiles = scoreFindings([finding({ location: 'Line 42' })], [BUG, other], {
+    files: ['src/cache.js', 'src/other.js'],
+  })
+  assert.equal(manyFiles.recall, 0)
+  assert.deepEqual(manyFiles.missed, ['unbounded-cache', 'other'])
+
+  const oneSeededButManyTaskFiles = scoreFindings([finding({ location: 'Line 42' })], [BUG], {
+    files: ['src/cache.js', 'src/helper.js'],
+  })
+  assert.equal(oneSeededButManyTaskFiles.recall, 0, 'the scorer must not infer a file from the seed set')
+})
+
 test('the right place with unrelated words is not a match', () => {
   const result = scoreFindings([finding({
     evidence: 'the variable name here is unclear',

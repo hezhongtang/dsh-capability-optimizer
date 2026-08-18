@@ -1,7 +1,7 @@
 {
   "name": "dsh-capability-optimizer",
-  "version": "0.5.3",
-  "description": "External-expert consultation for DeepSeek Harness: headlessly invokes the Claude Code CLI with role personas (advisor / reviewer / designer, extensible via config) and returns the subscription model's replies as reference answers for the agent to weigh. · DSH 外部专家咨询：headless 调用 Claude Code CLI，以 advisor / reviewer / designer 等角色人设（可通过配置扩展）获得订阅模型的回复，作为给 agent 权衡的参考答案。",
+  "version": "0.6.0",
+  "description": "External-expert consultation for DeepSeek Harness: headlessly invokes Claude Code through explicit advisor / reviewer / designer / custom role contracts and returns structured reference answers for the agent to weigh. · DSH 外部专家咨询：通过明确的 advisor / reviewer / designer / 自定义角色合同 headless 调用 Claude Code，返回供 agent 权衡的结构化参考答案。",
   "keywords": [
     "dsh-plugin",
     "deepseek-harness",
