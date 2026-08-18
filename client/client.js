@@ -138,6 +138,7 @@ const zh = {
   acAnswered: '已回答',
   acFailed: '失败',
   acCancelled: '已取消',
+  acNotJson: '自动咨询接口未返回 JSON。更新插件后请重启 dsh web。',
   tabPlanned: '规划中',
   reservedTitle: '工作区已预留',
   reservedBody: '该 harness 的运行器就绪后，其配置将在此展开；角色体系与咨询工具保持共用。',
@@ -260,6 +261,7 @@ const en = {
   acAnswered: 'answered',
   acFailed: 'failed',
   acCancelled: 'cancelled',
+  acNotJson: 'Auto-consult API did not return JSON. Restart dsh web after updating the plugin.',
   tabPlanned: 'planned',
   reservedTitle: 'Workspace reserved',
   reservedBody: 'Once this harness\'s runner lands, its configuration unfolds here; the role roster and consultation tools stay shared.',
@@ -415,9 +417,39 @@ function ensureStyles() {
   stylesMounted = true
 }
 
+/**
+ * Parse a fetch body. The host SPA answers unregistered paths with HTML 200,
+ * so `res.ok` is not enough — a missing plugin route used to become `{}`
+ * and crash the composer slot on `session.enabled`.
+ */
+function readApiJson(res, raw) {
+  const ct = typeof res.headers?.get === 'function' ? (res.headers.get('content-type') ?? '') : ''
+  if (!ct.includes('application/json')) throw new Error('expected JSON')
+  try {
+    return raw.length === 0 ? {} : JSON.parse(raw)
+  } catch {
+    throw new Error('invalid JSON')
+  }
+}
+
+function isAutoConsultState(data) {
+  return data !== null && typeof data === 'object' && !Array.isArray(data)
+    && data.defaults !== null && typeof data.defaults === 'object'
+    && data.session !== null && typeof data.session === 'object'
+    && Array.isArray(data.session.enabled)
+    && Array.isArray(data.roles)
+}
+
 async function api(path, options) {
   const res = await fetch(path, { cache: 'no-store', ...options })
-  const data = await res.json().catch(() => ({}))
+  const raw = await res.text()
+  let data
+  try {
+    data = readApiJson(res, raw)
+  } catch (error) {
+    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    throw error
+  }
   if (!res.ok) {
     const detail = Array.isArray(data.problems) ? data.problems.join('; ') : (data.error ?? `HTTP ${res.status}`)
     throw new Error(detail)
@@ -678,15 +710,23 @@ function AutoConsultControl({ sessionId, t }) {
   const [open, setOpen] = useState(false)
   const [anchor, setAnchor] = useState(null) // { left, top } measured at open
   const [busy, setBusy] = useState(false)
+  const [fail, setFail] = useState(null)
   const root = useRef(null)
   const btn = useRef(null)
+
+  const adopt = useCallback((data) => {
+    if (!isAutoConsultState(data)) throw new Error(t('acNotJson'))
+    setState(data)
+    setFail(null)
+    return data
+  }, [t])
 
   const pull = useCallback(async () => {
     if (typeof sessionId !== 'string' || sessionId.length === 0) return
     try {
       let data = await api(`/dsh-capability-optimizer/autoconsult?session=${encodeURIComponent(sessionId)}`)
       // Session still on defaults: seed it with the remembered selection.
-      if (data.session.override === null) {
+      if (isAutoConsultState(data) && data.session.override === null) {
         const last = readAutoLast()
         if (last !== null) {
           data = await api('/dsh-capability-optimizer/autoconsult-save', {
@@ -696,18 +736,21 @@ function AutoConsultControl({ sessionId, t }) {
           })
         }
       }
-      setState(data)
-    } catch { /* stays null: the popover offers a retry */ }
-  }, [sessionId])
+      adopt(data)
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error)
+      setFail(/json/i.test(raw) ? t('acNotJson') : raw)
+    }
+  }, [sessionId, adopt, t])
 
-  useEffect(() => { setState(null); pull() }, [pull])
+  useEffect(() => { setState(null); setFail(null); pull() }, [pull])
 
   // Keep usage counts fresh while the popover is open.
   useEffect(() => {
     if (!open || typeof sessionId !== 'string' || sessionId.length === 0) return undefined
     const timer = setInterval(() => {
       api(`/dsh-capability-optimizer/autoconsult?session=${encodeURIComponent(sessionId)}`)
-        .then((data) => { setState(data) })
+        .then((data) => { if (isAutoConsultState(data)) { setState(data); setFail(null) } })
         .catch(() => { /* transient */ })
     }, 8000)
     return () => { clearInterval(timer) }
@@ -738,9 +781,12 @@ function AutoConsultControl({ sessionId, t }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify({ session: sessionId, enabled }),
       })
-      setState(data)
+      adopt(data)
       writeAutoLast(enabled)
-    } catch { /* optimistic state stands; the next open resyncs */ } finally {
+    } catch (error) {
+      const raw = error instanceof Error ? error.message : String(error)
+      setFail(/json/i.test(raw) ? t('acNotJson') : raw)
+    } finally {
       setBusy(false)
     }
   }
@@ -756,9 +802,9 @@ function AutoConsultControl({ sessionId, t }) {
   }
 
   if (typeof sessionId !== 'string' || sessionId.length === 0) return null
-  const enabledCount = state === null ? 0 : state.session.enabled.length
-  const overrideOn = state !== null && state.session.override !== null
-  const cap = state === null ? 0 : state.defaults.capPerRole
+  const enabledCount = Array.isArray(state?.session?.enabled) ? state.session.enabled.length : 0
+  const overrideOn = state !== null && state.session?.override !== null
+  const cap = Number.isFinite(state?.defaults?.capPerRole) ? state.defaults.capPerRole : 0
 
   return h('div', { className: 'dco-ac', ref: root },
     h('button', {
@@ -776,11 +822,12 @@ function AutoConsultControl({ sessionId, t }) {
       style: anchor === null ? { left: '8px', bottom: '48px' } : { left: `${anchor.left}px`, top: `${anchor.top}px` },
     },
       state === null
-        ? h('div', { className: 'dco-ac-note' }, `${t('loading')} `,
+        ? h('div', { className: 'dco-ac-note' }, `${fail ?? t('loading')} `,
             h('button', { className: 'dco-ac-link', type: 'button', onClick: pull }, t('retry')))
         : h(React.Fragment, null,
           h('h4', null, t('autoTitle')),
           h('div', { className: 'dco-ac-note' }, state.defaults?.mode === 'off' ? t('autoHintOff') : t('autoHint')),
+          fail ? h('div', { className: 'dco-ac-note' }, fail) : null,
           Array.isArray(state.dropped ?? state.session.overrideDropped) && (state.dropped ?? state.session.overrideDropped).length > 0
             ? h('div', { className: 'dco-ac-note' }, t('acDropped').replace('{keys}', (state.dropped ?? state.session.overrideDropped).map((entry) => entry.key).join(', ')))
             : null,
@@ -796,7 +843,7 @@ function AutoConsultControl({ sessionId, t }) {
                 }),
                 h('span', { className: 'dco-ac-name' }, role.name),
                 role.label ? h('span', { className: 'dco-ac-label' }, role.label) : null,
-                usageBadge(t, state.session.usage?.[role.name], state.session.counts[role.name] ?? 0, cap))),
+                usageBadge(t, state.session.usage?.[role.name], state.session.counts?.[role.name] ?? 0, cap))),
           h('div', { className: 'dco-ac-foot' },
             h('span', { className: 'dco-ac-ovr' }, overrideOn ? t('acOverrideOn') : null),
             overrideOn
@@ -1098,7 +1145,12 @@ exports.name = 'dsh-capability-optimizer'
 // 'slots' and 'locale' are safe to require: ui-layout (mandatory in every web
 // composition) already hard-depends on them.
 exports.inject = ['slots', 'locale']
+exports.isAutoConsultState = isAutoConsultState
+exports.readApiJson = readApiJson
+
 exports.apply = function apply(ctx) {
+  // Chat seat never mounts the Settings section, so styles cannot wait for it.
+  ensureStyles()
   ctx.effect(() => ctx.locale.register(NS, { zh, en }), 'dsh-capability-optimizer: dictionaries')
   const t = ctx.locale.bind(NS)
 

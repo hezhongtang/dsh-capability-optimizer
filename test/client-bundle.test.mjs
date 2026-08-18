@@ -29,10 +29,11 @@ const reactStub = {
   useRef: (initial) => ({ current: initial }),
 }
 
-/** Load the bundle the way the host does; return its exports. */
+/** Load the bundle the way the host does; return its exports and captured styles. */
 function loadClient() {
   const source = readFileSync(join(repoRoot, 'client', 'client.js'), 'utf8')
   let loaded = null
+  const styles = []
   const sandbox = {
     window: {
       __ModuleLoader__: {
@@ -44,18 +45,26 @@ function loadClient() {
         },
       },
     },
-    document: { getElementById: () => null, createElement: () => ({ setAttribute() {} }), head: { appendChild() {} } },
+    document: {
+      getElementById: () => null,
+      createElement: (tag) => {
+        const el = { tagName: tag, attributes: {}, textContent: '', setAttribute(key, value) { this.attributes[key] = value } }
+        if (tag === 'style') styles.push(el)
+        return el
+      },
+      head: { appendChild() {} },
+    },
     localStorage: { getItem: () => null, setItem: () => {} },
     fetch: () => Promise.reject(new Error('no network in tests')),
   }
   runInNewContext(source, sandbox, { filename: 'client/client.js' })
   assert.notEqual(loaded, null, 'the bundle never called window.__ModuleLoader__.load')
-  return loaded
+  return { client: loaded, styles }
 }
 
 /** Drive `apply()` with a stub host, capturing dictionaries and slot registrations. */
 function applyClient() {
-  const client = loadClient()
+  const { client, styles } = loadClient()
   const registered = []
   let dictionaries = null
   const ctx = {
@@ -70,7 +79,7 @@ function applyClient() {
     },
   }
   client.apply(ctx)
-  return { client, registered, dictionaries }
+  return { client, registered, dictionaries, styles }
 }
 
 test('the client bundle loads and registers both seats', () => {
@@ -148,10 +157,52 @@ test('the composer popover has localized words for the whole ledger breakdown', 
   const { dictionaries } = applyClient()
 
   for (const locale of ['zh', 'en']) {
-    for (const key of ['acAttempted', 'acAnswered', 'acFailed', 'acCancelled']) {
+    for (const key of ['acAttempted', 'acAnswered', 'acFailed', 'acCancelled', 'acNotJson']) {
       assert.equal(typeof dictionaries[locale][key], 'string',
         `${locale}.${key} must exist for the usage breakdown`)
       assert.ok(dictionaries[locale][key].length > 0, `${locale}.${key} must not be empty`)
     }
   }
+})
+
+/**
+ * The host SPA answers unknown paths with HTML 200. `fetch` then looks
+ * successful, `res.json()` fails, and the old `catch (() => ({}))` turned
+ * that into an empty object. Adopting `{}` as composer state reads
+ * `session.enabled` and the slot error-boundary unmounts the button.
+ */
+test('an HTML 200 SPA shell is not a valid auto-consult snapshot', () => {
+  const { client } = applyClient()
+  assert.equal(typeof client.isAutoConsultState, 'function')
+  assert.equal(client.isAutoConsultState({}), false)
+  assert.equal(client.isAutoConsultState(null), false)
+  assert.equal(client.isAutoConsultState({ session: {} }), false)
+  assert.equal(client.isAutoConsultState({
+    defaults: { capPerRole: 3, mode: 'remind' },
+    session: { enabled: [], override: null, counts: {}, usage: {} },
+    roles: [],
+  }), true)
+})
+
+test('readApiJson rejects the SPA HTML shell even when status is 200', () => {
+  const { client } = applyClient()
+  const html = {
+    ok: true,
+    status: 200,
+    headers: { get: () => 'text/html; charset=utf-8' },
+  }
+  assert.throws(() => client.readApiJson(html, '<!doctype html>'), /JSON|json/)
+  const json = {
+    ok: true,
+    status: 200,
+    headers: { get: () => 'application/json; charset=utf-8' },
+  }
+  // vm-realm objects fail a host-realm deepEqual on the prototype alone.
+  assert.equal(JSON.stringify(client.readApiJson(json, '{"session":{"enabled":[]}}')), '{"session":{"enabled":[]}}')
+})
+
+test('apply() injects composer styles so the chat seat is not unstyled', () => {
+  const { styles } = applyClient()
+  assert.ok(styles.some((el) => el.attributes['data-dco'] === ''),
+    'ensureStyles must run from apply(), not only from the Settings section')
 })
