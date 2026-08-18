@@ -103,6 +103,36 @@ test('the zh and en dictionaries define exactly the same keys', () => {
  * difference since P0 (`attempts` / `succeeded` / `failed` / `aborted`); the
  * composer popover needs the words to say it.
  */
+test('extraArgs placeholder names allowlisted flags, not a refused one', () => {
+  const { dictionaries } = applyClient()
+  for (const locale of ['zh', 'en']) {
+    assert.match(dictionaries[locale].extraArgsPh, /--safe-mode/)
+    assert.doesNotMatch(dictionaries[locale].extraArgsPh, /--settings/)
+    assert.equal(typeof dictionaries[locale].applyDraft, 'string')
+    assert.equal(typeof dictionaries[locale].savedNotApplied, 'string')
+    assert.equal(typeof dictionaries[locale].resetNotApplied, 'string')
+    assert.equal(typeof dictionaries[locale].rejectedArgsNote, 'string')
+    assert.equal(typeof dictionaries[locale].errAdvisorFallback, 'string')
+    assert.equal(typeof dictionaries[locale].autoMode, 'string')
+    assert.equal(typeof dictionaries[locale].autoModeHint, 'string')
+    assert.equal(typeof dictionaries[locale].autoHintOff, 'string')
+    assert.equal(typeof dictionaries[locale].acDropped, 'string')
+    assert.equal(typeof dictionaries[locale].maxBudgetUsd, 'string')
+    assert.match(dictionaries[locale].testMeta, /\{model\}/)
+    assert.match(dictionaries[locale].testHint, /180/)
+    assert.match(dictionaries[locale].autoModeHint, /Write/)
+  }
+})
+
+test('the save path reads the host applied flag instead of always claiming a hot apply', () => {
+  const source = readFileSync(join(repoRoot, 'client', 'client.js'), 'utf8')
+  assert.match(source, /data\.applied === false/)
+  assert.match(source, /data\.rejectedArgs/)
+  assert.match(source, /topTierConsultantModels/)
+  assert.match(source, /resetNotApplied/)
+  assert.match(source, /errAdvisorFallback/)
+})
+
 test('settings copy names the advisor top-tier model pin in both locales', () => {
   const { dictionaries } = applyClient()
   for (const locale of ['zh', 'en']) {
