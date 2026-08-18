@@ -8,7 +8,7 @@
  */
 import { test } from 'node:test'
 import assert from 'node:assert/strict'
-import { createAutoConsultRuntime, wireAutoConsult } from '../lib/autoconsult.js'
+import { createAutoConsultRuntime, parseToolArguments, wireAutoConsult } from '../lib/autoconsult.js'
 
 const ROSTER = [
   { name: 'advisor', enabled: true },
@@ -397,6 +397,22 @@ test('remind mode (the default) still only nudges and never refuses a write', ()
   assert.equal(runtime.refuseWrite('s1', 'Write').refuse, false)
   assert.match(runtime.policyText('s1'), /after the first file write of a turn/)
   assert.doesNotMatch(runtime.policyText('s1'), /before the first write/)
+})
+
+test('required policy text does not claim the host blocks writes', () => {
+  const { runtime } = makeRuntime({ enabled: ['claude-code:reviewer'], mode: 'required' })
+  const text = runtime.policyText('s1')
+  assert.match(text, /required/)
+  assert.match(text, /logged, not blocked|cannot intercept/i)
+  assert.doesNotMatch(text, /refuses one write until/)
+})
+
+test('parseToolArguments accepts objects and JSON strings', () => {
+  assert.deepEqual(parseToolArguments({ role: 'reviewer' }), { role: 'reviewer' })
+  assert.deepEqual(parseToolArguments('{"role":"reviewer"}'), { role: 'reviewer' })
+  assert.deepEqual(parseToolArguments('{not json'), {})
+  assert.deepEqual(parseToolArguments(''), {})
+  assert.deepEqual(parseToolArguments(null), {})
 })
 
 test('required refuses one write-family tool before a success this turn and then allows it', () => {

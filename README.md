@@ -67,7 +67,7 @@ The agent picks the role, packs the material into context, and calls `consult_ex
 
 The composer toolbar (the permissions control's row) carries an Expert Consult toggle: check roles for this session and the host proactively works them into the loop — no prompting, no re-explaining.
 
-- **Policy section**: every model request carries a short policy block naming the checked roles and when each applies (advisor at decision points, reviewer before declaring work done, designer after the first file write of a turn, on the next step). Auto-consult mode is `off | remind | required` (default `remind`).
+- **Policy section**: every model request carries a short policy block naming the checked roles and when each applies (advisor at decision points, reviewer before declaring work done, designer after the first file write of a turn, on the next step). Auto-consult mode is `off | remind | required` (default `remind`). `required` is a harder reminder (policy + a log on write tools). DSH has no pre-execute hook in this plugin's inject surface, so Write is not actually blocked.
 - **Lifecycle nudges**: the first file write of a turn arms the designer anchor (the nudge rides the next step of that turn); a turn that changed files and is about to finish without a reviewer pass is steered one more step to consult first.
 - **Budget**: `capPerRole` (default 3) counts real `consult_*` calls per role per session — nudges and the model's own discretionary calls share it. At the cap the promise drops out of the policy text and the anchors go quiet.
 - **Soft by design**: a nudge guarantees the instruction is delivered, never the tool call — dsh has no forced-call API. A model that declines must state the reason in one line.
@@ -77,10 +77,10 @@ The composer toolbar (the permissions control's row) carries an Expert Consult t
 
 **Settings → Expert Consult** is organized as one workspace per harness CLI — a tab bar over the catalog (`claude-code` live; `codex`, `zcode`, `kimi-code`, `pi`, `opencode`, `omp` reserved with a planned-status page and no settings stored until their runners land). The Claude Code workspace manages everything at runtime:
 
-- **General** — CLI path, default model (full catalog: follow-CLI-default, latest aliases, and versioned ids like `claude-opus-5` — extracted from the CLI itself), thinking effort (`--effort`: low/medium/high/xhigh/max), fallback model, per-call timeout, max turns, panel size, extra CLI args.
+- **General** — CLI path, default model (full catalog: follow-CLI-default, latest aliases, and versioned ids like `claude-opus-5` — extracted from the CLI itself), thinking effort (`--effort`: low/medium/high/xhigh/max), fallback model, per-call timeout, max turns, panel size, per-consult dollar cap, extra CLI args (allowlisted; `--settings` is refused).
 - **Roles workspace** — add / edit / delete roles, each with name, label, description, system prompt, a dedicated model, a dedicated fallback, and a dedicated thinking effort. A role's switch disables it omp-style: it stays in the roster but leaves the tools' enum until re-enabled.
-- **Auto consult** — the default checked set plus the per-role per-session call budget; the composer toggle overrides it per session.
-- **Connectivity test** — one real consultation end-to-end (CLI + auth + proxy), with turns, duration, cost, and a fallback-used marker.
+- **Auto consult** — the default checked set, per-role per-session call budget, and trigger mode (`off | remind | required`); the composer toggle overrides the checked set per session.
+- **Connectivity test** — one real consultation end-to-end (CLI + auth + proxy), showing the effective model, turns, duration, cost, and a fallback-used marker.
 - **Save & apply** persists to `~/.dsh/dsh-capability-optimizer/settings.json` (atomic writes, 0600) and hot-applies: the agent tools re-register immediately. **Reset** removes the file and restores defaults.
 
 Per-role `model` and `effort` beat the global defaults; a call-site `effort` argument beats both. `fallbackModel` (role-level or global) retries once when Claude fails with a model-level error (`unrecognized_model`, model-not-found, ...), recording `usedFallback` in the run metadata.

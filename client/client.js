@@ -55,7 +55,23 @@ const zh = {
   maxTurns: 'CLI 内最大轮数',
   maxPanelRoles: '并行会诊角色上限',
   extraArgs: '附加 CLI 参数',
-  extraArgsPh: '空格分隔，如 --settings ./x.json',
+  extraArgsPh: '空格分隔，如 --safe-mode 或 --add-dir /path',
+  rejectedArgsNote: '已忽略不安全参数：{args}',
+  validationProblems: '设置文件未通过校验（已回退到组合配置）：{problems}',
+  repairsNote: '顾问模型已自动对齐顶级模型：{repairs}',
+  savedNotApplied: '已写入磁盘，但咨询工具没有重注册（没有 tools 服务或名册为空）',
+  resetNotApplied: '已恢复默认文件，但咨询工具没有重注册',
+  errAdvisorFallback: 'Advisor 回退模型也必须是顶级模型（claude-opus-5）',
+  autoHintOff: '当前模式为关闭：勾选不会写入政策，也不会催办。',
+  acDropped: '未生效：{keys}',
+  testUsedRole: '实际角色 {role}',
+  applyDraft: '应用到草稿',
+  maxBudgetUsd: '单次咨询美元上限（0 = 不设上限）',
+  autoMode: '触发模式',
+  autoModeOff: '关闭',
+  autoModeRemind: '提醒（默认）',
+  autoModeRequired: '加强提醒',
+  autoModeHint: 'required 会写更硬的政策，并在写文件时打日志。主机没有拦截写工具的 API，并不能真正拦住 Write。',
   rolesTitle: '角色',
   rolesHint: '停用的角色保留在册但不出现在工具枚举中（omp 风格）',
   addRole: '新增角色',
@@ -94,7 +110,7 @@ const zh = {
   confirmReset: '放弃全部设置，恢复内置默认？',
   resetDone: '已恢复默认',
   testTitle: '连通性测试',
-  testHint: '将真实调用一次 Claude（消耗订阅额度）',
+  testHint: '对已保存的设置真实调用一次 Claude（消耗额度）。未保存的草稿不会参与。探测上限为 2 轮 / 180 秒。',
   testRole: '角色',
   testQuestion: '测试问题',
   testRun: '运行测试',
@@ -102,7 +118,7 @@ const zh = {
   testOk: '成功',
   testFail: '失败',
   testAnswer: '回复',
-  testMeta: '模型 {model} · {ms}ms · {turns} 轮 · ${cost}',
+  testMeta: '模型 {model} · {ms}ms · {turns} 轮 · {cost}',
   usedFallback: '已触发模型回退',
   requiredPrompt: '启用状态的角色提示词不能为空',
   nameRequired: '名称不能为空',
@@ -111,7 +127,7 @@ const zh = {
   errAllDisabled: '至少启用一个角色',
   errNumberRange: '数值超出允许范围',
   autoTitle: '自动咨询',
-  autoHint: '勾选的角色会在关键节点被主动咨询：政策写入系统提示，必要时催办；每次调用消耗 Claude 订阅额度。Advisor 只会请比主模型更强的顶级模型（claude-opus-5）。',
+  autoHint: '在提醒 / 加强提醒模式下，勾选的角色会写入政策并在关键节点催办。关闭模式不会催办。每次调用消耗 Claude 订阅额度。Advisor 只会请顶级模型（claude-opus-5）。',
   autoCap: '每角色每会话调用上限',
   autoDefaultsHint: '这里是默认勾选集；聊天框开关可按会话临时覆盖',
   acTooltip: '专家咨询 · 自动',
@@ -161,7 +177,23 @@ const en = {
   maxTurns: 'Max turns inside CLI',
   maxPanelRoles: 'Max panel roles',
   extraArgs: 'Extra CLI args',
-  extraArgsPh: 'space-separated, e.g. --settings ./x.json',
+  extraArgsPh: 'space-separated, e.g. --safe-mode or --add-dir /path',
+  rejectedArgsNote: 'Ignored unsafe args: {args}',
+  validationProblems: 'Settings file failed validation (fell back to composition config): {problems}',
+  repairsNote: 'Advisor model was aligned to the top-tier pin: {repairs}',
+  savedNotApplied: 'Saved to disk, but consultation tools did not re-register (no tools service or empty roster)',
+  resetNotApplied: 'Defaults restored on disk, but consultation tools did not re-register',
+  errAdvisorFallback: 'Advisor fallback must also be a top-tier model (claude-opus-5)',
+  autoHintOff: 'Mode is off: checking roles does not write policy and does not nudge.',
+  acDropped: 'Not in force: {keys}',
+  testUsedRole: 'actual role {role}',
+  applyDraft: 'Apply to draft',
+  maxBudgetUsd: 'Per-consult dollar cap (0 = no cap)',
+  autoMode: 'Trigger mode',
+  autoModeOff: 'Off',
+  autoModeRemind: 'Remind (default)',
+  autoModeRequired: 'Harder reminder',
+  autoModeHint: 'required writes a harder policy and logs on write tools. The host has no pre-execute hook, so Write is not actually blocked.',
   rolesTitle: 'Roles',
   rolesHint: 'A disabled role stays in the roster but leaves the tools\' enum (omp-style)',
   addRole: 'Add role',
@@ -186,7 +218,7 @@ const en = {
   custom: 'custom',
   builtinDescAdvisor: 'Pragmatic senior-engineer counsel: trade-offs, risks, and what to do next. Pick for direction and decision points.',
   builtinDescReviewer: 'Critical reviewer of code, diffs, or plans: bugs, edge cases, security, missing tests. Pick before declaring work done.',
-  builtinDescDesigner: 'Architect for structure and interfaces: module boundaries, API shape, data flow, alternatives with trade-offs. Auto-nudge arrives after the first write of a turn, on the next step.',
+  builtinDescDesigner: 'Architect for structure and interfaces: module boundaries, API shape, data flow, alternatives with trade-offs. Pick before significant new code.',
   delete: 'Delete',
   confirmDelete: 'Delete this role?',
   cancel: 'Cancel',
@@ -200,7 +232,7 @@ const en = {
   confirmReset: 'Discard all settings and restore built-in defaults?',
   resetDone: 'Reset to defaults',
   testTitle: 'Connectivity test',
-  testHint: 'Runs one real Claude consultation (spends subscription quota)',
+  testHint: 'Runs one real Claude consultation against last-saved settings (spends quota). Unsaved draft changes are not used. The ping is capped at 2 turns / 180s.',
   testRole: 'Role',
   testQuestion: 'Test question',
   testRun: 'Run test',
@@ -208,7 +240,7 @@ const en = {
   testOk: 'OK',
   testFail: 'Failed',
   testAnswer: 'Answer',
-  testMeta: 'model {model} · {ms}ms · {turns} turns · ${cost}',
+  testMeta: 'model {model} · {ms}ms · {turns} turns · {cost}',
   usedFallback: 'model fallback used',
   requiredPrompt: 'An enabled role needs a system prompt',
   nameRequired: 'Name is required',
@@ -217,7 +249,7 @@ const en = {
   errAllDisabled: 'At least one role must stay enabled',
   errNumberRange: 'Value out of range',
   autoTitle: 'Auto consult',
-  autoHint: 'Checked roles are consulted proactively at key points: policy rides the system prompt, with nudges when needed; each call spends Claude subscription quota. Advisor only consults a stronger top-tier model (claude-opus-5).',
+  autoHint: 'In remind / harder-reminder mode, checked roles ride the policy and get nudged at key points. Off mode does not nudge. Each call spends Claude subscription quota. Advisor only consults a top-tier model (claude-opus-5).',
   autoCap: 'Per-role calls per session',
   autoDefaultsHint: 'This is the default checked set; the composer toggle overrides it per session',
   acTooltip: 'Expert consult · auto',
@@ -255,16 +287,26 @@ const BUILTIN_DESC_KEYS = {
   designer: 'builtinDescDesigner',
 }
 
-/** Keep in sync with lib/consultant-model.js — this bundle cannot import lib/. */
+/** Fallback only — GET /settings publishes the live lists from lib/consultant-model.js. */
 const TOP_TIER_CONSULTANT_MODELS = ['claude-opus-5']
 const HIGH_INTELLECT_ROLES = new Set(['advisor'])
+
+function topTierModels(loaded) {
+  const list = loaded?.topTierConsultantModels
+  return Array.isArray(list) && list.length > 0 ? list : TOP_TIER_CONSULTANT_MODELS
+}
+
+function highIntellectRoles(loaded) {
+  const list = loaded?.highIntellectRoles
+  return new Set(Array.isArray(list) && list.length > 0 ? list : [...HIGH_INTELLECT_ROLES])
+}
 
 function roleSlug(name) {
   return String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
-function isHighIntellectRoleName(name) {
-  return HIGH_INTELLECT_ROLES.has(roleSlug(name))
+function isHighIntellectRoleName(name, loaded) {
+  return highIntellectRoles(loaded).has(roleSlug(name))
 }
 // Reserved-backend notes are UI copy, so they live in the dictionaries (the
 // host catalog carries no locale); the host note stays as a fallback for ids
@@ -393,11 +435,11 @@ function TextField({ label, value, placeholder, onChange, mono }) {
     }))
 }
 
-function NumberField({ label, value, onChange, max }) {
+function NumberField({ label, value, onChange, max, min = 1, step }) {
   return h('div', { className: 'dco-field' },
     h('label', null, label),
     h('input', {
-      className: 'dco-input', type: 'number', min: 1, max, value: String(value),
+      className: 'dco-input', type: 'number', min, max, step, value: String(value),
       onChange: (e) => onChange(e.target.value),
     }))
 }
@@ -461,7 +503,7 @@ function Switch({ on, onToggle, title }) {
   })
 }
 
-function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
+function RoleEditor({ role, isNew, t, models, names, onSave, onClose, topTier = TOP_TIER_CONSULTANT_MODELS }) {
   const [draft, setDraft] = useState(role)
   const [problem, setProblem] = useState('')
   // Functional updates throughout: rapid batched input events must each build
@@ -474,13 +516,16 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
     if (names.has(name)) { setProblem(`${t('errDupRole')}: ${name}`); return }
     if (draft.enabled !== false && String(draft.systemPrompt ?? '').trim().length === 0) { setProblem(t('requiredPrompt')); return }
     const model = isHighIntellectRoleName(name)
-      ? (String(draft.model ?? '').trim() || TOP_TIER_CONSULTANT_MODELS[0])
+      ? (String(draft.model ?? '').trim() || topTier[0])
       : draft.model
-    if (isHighIntellectRoleName(name) && draft.enabled !== false && !TOP_TIER_CONSULTANT_MODELS.includes(model)) {
+    if (isHighIntellectRoleName(name) && draft.enabled !== false && !topTier.includes(model)) {
       setProblem(t('errAdvisorModel'))
       return
     }
-    onSave({ ...draft, name, model })
+    const fallbackModel = isHighIntellectRoleName(name)
+      ? (topTier.includes(String(draft.fallbackModel ?? '').trim()) ? draft.fallbackModel : '')
+      : draft.fallbackModel
+    onSave({ ...draft, name, model, fallbackModel })
   }
 
   return h('div', { className: 'dco-modal-bg', onClick: onClose },
@@ -502,12 +547,18 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
           isHighIntellectRoleName(draft.name)
             ? h(ModelField, {
               label: t('roleModelAdvisor'),
-              value: draft.model || TOP_TIER_CONSULTANT_MODELS[0],
-              t, models, allowed: TOP_TIER_CONSULTANT_MODELS, required: true,
+              value: draft.model || topTier[0],
+              t, models, allowed: topTier, required: true,
               onChange: set('model'),
             })
             : h(ModelField, { label: t('roleModel'), value: draft.model ?? '', t, models, onChange: set('model') }),
-          h(ModelField, { label: t('roleFallback'), value: draft.fallbackModel ?? '', t, models, onChange: set('fallbackModel') }),
+          h(ModelField, {
+            label: t('roleFallback'),
+            value: draft.fallbackModel ?? '',
+            t, models,
+            allowed: isHighIntellectRoleName(draft.name) ? topTier : undefined,
+            onChange: set('fallbackModel'),
+          }),
           h(EffortField, { label: t('roleEffort'), value: draft.effort ?? '', t, onChange: set('effort') })),
         isHighIntellectRoleName(draft.name)
           ? h('p', { className: 'dco-hint' }, t('roleModelAdvisorHint'))
@@ -515,7 +566,7 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
         problem ? h('div', { className: 'dco-status err' }, problem) : null),
       h('div', { className: 'dco-modal-foot' },
         h('button', { className: 'dco-btn', onClick: onClose }, t('cancel')),
-        h('button', { className: 'dco-btn primary', onClick: save }, t('save')))))
+        h('button', { className: 'dco-btn primary', onClick: save }, t('applyDraft')))))
 }
 
 function TestPanel({ t, roles }) {
@@ -541,12 +592,15 @@ function TestPanel({ t, roles }) {
     }
   }
 
-  const metaBits = []
-  if (result?.meta) {
-    if (Number.isFinite(result.meta.numTurns)) metaBits.push(`${result.meta.numTurns}`)
-    if (Number.isFinite(result.meta.durationMs)) metaBits.push(`${result.meta.durationMs}ms`)
-    if (Number.isFinite(result.meta.costUsd)) metaBits.push(`$${result.meta.costUsd.toFixed(4)}`)
-  }
+  const model = result?.effectiveModel || result?.meta?.effectiveModel || ''
+  const ms = result?.meta?.durationMs
+  const turns = result?.meta?.numTurns
+  const cost = result?.meta?.costUsd
+  const metaLine = result === null ? '' : t('testMeta')
+    .replace('{model}', model || '—')
+    .replace('{ms}', Number.isFinite(ms) ? String(ms) : '—')
+    .replace('{turns}', Number.isFinite(turns) ? String(turns) : '—')
+    .replace('{cost}', Number.isFinite(cost) ? `$${cost.toFixed(4)}` : '—')
 
   return h('div', { className: 'dco-card' },
     h('h3', null, t('testTitle')),
@@ -558,7 +612,7 @@ function TestPanel({ t, roles }) {
       h('button', { className: 'dco-btn primary', disabled: busy || role === '', onClick: run }, busy ? t('testing') : t('testRun'))),
     result !== null && h('div', { className: 'dco-test-out' },
       h('div', { className: `dco-status ${result.ok ? 'ok' : 'err'}` },
-        `${result.ok ? `✓ ${t('testOk')}` : `✗ ${t('testFail')}`}${metaBits.length > 0 ? ` · ${metaBits.join(' · ')}` : ''}${result.meta?.usedFallback ? ` · ${t('usedFallback')}` : ''}`),
+        `${result.ok ? `✓ ${t('testOk')}` : `✗ ${t('testFail')}`}${result.role ? ` · ${t('testUsedRole').replace('{role}', result.role)}` : ''} · ${metaLine}${result.usedFallback || result.meta?.usedFallback ? ` · ${t('usedFallback')}` : ''}`),
       result.ok
         ? h('div', { className: 'dco-test-answer' }, result.answer ?? '')
         : h('div', { className: 'dco-test-answer' }, result.error ?? '')))
@@ -726,7 +780,10 @@ function AutoConsultControl({ sessionId, t }) {
             h('button', { className: 'dco-ac-link', type: 'button', onClick: pull }, t('retry')))
         : h(React.Fragment, null,
           h('h4', null, t('autoTitle')),
-          h('div', { className: 'dco-ac-note' }, t('autoHint')),
+          h('div', { className: 'dco-ac-note' }, state.defaults?.mode === 'off' ? t('autoHintOff') : t('autoHint')),
+          Array.isArray(state.dropped ?? state.session.overrideDropped) && (state.dropped ?? state.session.overrideDropped).length > 0
+            ? h('div', { className: 'dco-ac-note' }, t('acDropped').replace('{keys}', (state.dropped ?? state.session.overrideDropped).map((entry) => entry.key).join(', ')))
+            : null,
           h('div', { className: 'dco-ac-list' },
             state.roles.length === 0
               ? h('div', { className: 'dco-ac-note' }, t('acEmpty'))
@@ -776,7 +833,7 @@ function Section({ t }) {
       const data = await api('/dsh-capability-optimizer/settings')
       setLoaded(data)
       setDraft(JSON.parse(JSON.stringify(data.effective)))
-      setAuto(JSON.parse(JSON.stringify(data.autoConsult ?? { enabled: [], capPerRole: 3 })))
+      setAuto(JSON.parse(JSON.stringify(data.autoConsult ?? { enabled: [], capPerRole: 3, mode: 'remind' })))
     } catch (error) {
       setStatus({ kind: 'err', text: `${t('loadFail')}: ${error.message}` })
     }
@@ -812,9 +869,14 @@ function Section({ t }) {
       if (draft.roles.every((r) => r.enabled === false)) problems.push(t('errAllDisabled'))
       for (const r of draft.roles) {
         if (r.enabled !== false && String(r.systemPrompt ?? '').trim().length === 0) problems.push(`${t('requiredPrompt')}: ${r.name}`)
-        if (r.enabled !== false && isHighIntellectRoleName(r.name)
-          && !TOP_TIER_CONSULTANT_MODELS.includes(r.model || TOP_TIER_CONSULTANT_MODELS[0])) {
+        if (r.enabled !== false && isHighIntellectRoleName(r.name, loaded)
+          && !topTierModels(loaded).includes(r.model || topTierModels(loaded)[0])) {
           problems.push(`${t('errAdvisorModel')}: ${r.name}`)
+        }
+        if (r.enabled !== false && isHighIntellectRoleName(r.name, loaded)
+          && String(r.fallbackModel ?? '').trim().length > 0
+          && !topTierModels(loaded).includes(String(r.fallbackModel).trim())) {
+          problems.push(`${t('errAdvisorFallback')}: ${r.name}`)
         }
       }
     }
@@ -835,10 +897,24 @@ function Section({ t }) {
         headers: { 'content-type': 'application/json' },
         body: JSON.stringify(payload),
       })
-      setLoaded({ ...loaded, effective: data.effective, autoConsult: data.autoConsult })
+      setLoaded({
+        ...loaded,
+        effective: data.effective,
+        autoConsult: data.autoConsult,
+        repairs: data.repairs ?? [],
+        validationProblems: data.validationProblems ?? [],
+        rejectedArgs: data.rejectedArgs ?? [],
+        fileError: data.fileError ?? null,
+        fileSettings: data.fileSettings ?? null,
+        fileExists: data.fileExists !== false,
+      })
       setDraft(JSON.parse(JSON.stringify(data.effective)))
       setAuto(JSON.parse(JSON.stringify(data.autoConsult)))
-      setStatus({ kind: 'ok', text: t('saved') })
+      const notes = [data.applied === false ? t('savedNotApplied') : t('saved')]
+      if (Array.isArray(data.rejectedArgs) && data.rejectedArgs.length > 0) {
+        notes.push(t('rejectedArgsNote').replace('{args}', data.rejectedArgs.map((entry) => entry.arg).join(' ')))
+      }
+      setStatus({ kind: data.applied === false ? 'err' : 'ok', text: notes.join(' · ') })
     } catch (error) {
       setStatus({ kind: 'err', text: `${t('saveFail')}: ${error.message}` })
     } finally {
@@ -851,10 +927,23 @@ function Section({ t }) {
     setBusy(true); setStatus(null)
     try {
       const data = await api('/dsh-capability-optimizer/settings/reset', { method: 'POST' })
-      setLoaded({ ...loaded, effective: data.effective, autoConsult: data.autoConsult })
+      setLoaded({
+        ...loaded,
+        effective: data.effective,
+        autoConsult: data.autoConsult,
+        repairs: [],
+        validationProblems: [],
+        rejectedArgs: [],
+        fileError: null,
+        fileSettings: null,
+        fileExists: false,
+      })
       setDraft(JSON.parse(JSON.stringify(data.effective)))
       setAuto(JSON.parse(JSON.stringify(data.autoConsult)))
-      setStatus({ kind: 'ok', text: t('resetDone') })
+      setStatus({
+        kind: data.applied === false ? 'err' : 'ok',
+        text: data.applied === false ? t('resetNotApplied') : t('resetDone'),
+      })
     } catch (error) {
       setStatus({ kind: 'err', text: error.message })
     } finally {
@@ -871,7 +960,16 @@ function Section({ t }) {
     h('div', null,
       h('h2', { style: { margin: 0, fontSize: '15px' } }, t('nav')),
       h('p', { className: 'dco-sub' }, t('subtitle')),
-      loaded.fileError ? h('p', { className: 'dco-status err' }, t('fileError')) : null),
+      loaded.fileError ? h('p', { className: 'dco-status err' }, t('fileError')) : null,
+      Array.isArray(loaded.validationProblems) && loaded.validationProblems.length > 0
+        ? h('p', { className: 'dco-status err' }, t('validationProblems').replace('{problems}', loaded.validationProblems.join('; ')))
+        : null,
+      Array.isArray(loaded.repairs) && loaded.repairs.length > 0
+        ? h('p', { className: 'dco-status' }, t('repairsNote').replace('{repairs}', loaded.repairs.map((item) => `${item.from || '∅'} → ${item.to}`).join(', ')))
+        : null,
+      Array.isArray(loaded.rejectedArgs) && loaded.rejectedArgs.length > 0
+        ? h('p', { className: 'dco-status' }, t('rejectedArgsNote').replace('{args}', loaded.rejectedArgs.map((entry) => entry.arg).join(' ')))
+        : null),
 
     h('div', { className: 'dco-tabs', role: 'tablist' },
       (loaded.backends ?? []).map((b) => h('button', {
@@ -896,6 +994,13 @@ function Section({ t }) {
         h(NumberField, { label: t('timeoutMs'), value: draft.timeoutMs, max: 3600000, onChange: num('timeoutMs', 300000, 3600000) }),
         h(NumberField, { label: t('maxTurns'), value: draft.maxTurns, max: 200, onChange: num('maxTurns', 8, 200) }),
         h(NumberField, { label: t('maxPanelRoles'), value: draft.maxPanelRoles, max: 32, onChange: num('maxPanelRoles', 4, 32) }),
+        h(NumberField, {
+          label: t('maxBudgetUsd'), value: draft.maxBudgetUsd ?? 0, min: 0, max: 100000, step: '0.01',
+          onChange: (value) => {
+            const n = Number(value)
+            setDraft((prev) => ({ ...prev, maxBudgetUsd: Number.isFinite(n) && n >= 0 ? n : 0 }))
+          },
+        }),
         h(TextField, { label: t('extraArgs'), value: (draft.extraArgs ?? []).join(' '), placeholder: t('extraArgsPh'), onChange: (v) => setDraft((prev) => ({ ...prev, extraArgs: v.split(/\s+/).filter((x) => x.length > 0) })), mono: true }))),
 
     h('div', { className: 'dco-card' },
@@ -908,7 +1013,9 @@ function Section({ t }) {
         draft.roles.map((role, index) => {
           const meta = []
           if (role.model) meta.push(h('span', { key: 'm', className: 'dco-pill' }, `${t('roleModelPill')}: ${role.model}`))
-          if (isHighIntellectRoleName(role.name)) meta.push(h('span', { key: 'tt', className: 'dco-pill tag' }, t('roleTopTierPill')))
+          if (isHighIntellectRoleName(role.name, loaded) && topTierModels(loaded).includes(role.model)) {
+            meta.push(h('span', { key: 'tt', className: 'dco-pill tag' }, t('roleTopTierPill')))
+          }
           if (role.fallbackModel) meta.push(h('span', { key: 'f', className: 'dco-pill' }, `${t('roleFallbackPill')}: ${role.fallbackModel}`))
           if (role.effort) meta.push(h('span', { key: 'e', className: 'dco-pill' }, `${t('roleEffortPill')}: ${role.effort}`))
           const descKey = BUILTIN_DESC_KEYS[role.name]
@@ -951,9 +1058,20 @@ function Section({ t }) {
         h(NumberField, { label: t('autoCap'), value: auto.capPerRole, max: 50, onChange: (v) => {
           const n = Number(v)
           setAuto((prev) => ({ ...prev, capPerRole: Number.isFinite(n) && n > 0 ? Math.min(Math.floor(n), 50) : 3 }))
-        } }))),
+        } }),
+        h('div', { className: 'dco-field' },
+          h('label', null, t('autoMode')),
+          h('select', {
+            className: 'dco-input',
+            value: auto.mode === 'off' || auto.mode === 'required' ? auto.mode : 'remind',
+            onChange: (e) => setAuto((prev) => ({ ...prev, mode: e.target.value })),
+          },
+            h('option', { value: 'off' }, t('autoModeOff')),
+            h('option', { value: 'remind' }, t('autoModeRemind')),
+            h('option', { value: 'required' }, t('autoModeRequired'))))),
+      h('p', { className: 'dco-hint' }, t('autoModeHint'))),
 
-    h(TestPanel, { t, roles: draft.roles }),
+    h(TestPanel, { t, roles: loaded.effective?.roles ?? draft.roles }),
 
     h('div', { className: 'dco-row' },
       h('button', { className: 'dco-btn primary', disabled: !dirty || busy, onClick: save }, busy ? t('saving') : t('save')),
@@ -963,6 +1081,7 @@ function Section({ t }) {
 
     editing !== null && h(RoleEditor, {
       role: editing.role, isNew: editing.isNew, t, models: loaded.models,
+      topTier: topTierModels(loaded),
       names: new Set(draft.roles.filter((r) => r !== editing.role).map((r) => r.name)),
       onClose: () => setEditing(null),
       onSave: (role) => {

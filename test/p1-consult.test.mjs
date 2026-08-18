@@ -150,9 +150,11 @@ function collectingRunner(field) {
 }
 
 test('fingerprint dedupe: a different model is a different consultation', async () => {
+  // Reviewer is not capability-pinned; advisor would collapse both aliases
+  // onto claude-opus-5 and correctly join them.
   const runner = collectingRunner('model')
   const service = createConsultationService({ settings: makeSettings(), runner: runner.run })
-  const same = { sessionId: 'dedupe-model', question: 'same q', context: 'same material', source: 'tool' }
+  const same = { sessionId: 'dedupe-model', role: 'reviewer', question: 'same q', context: 'same material', source: 'tool' }
 
   const [first, second] = await Promise.all([
     service.consult(ask({ ...same, model: 'opus' })),
@@ -162,6 +164,24 @@ test('fingerprint dedupe: a different model is a different consultation', async 
   assert.deepEqual([...runner.seen].sort(), ['haiku', 'opus'])
   assert.equal(first.answer, 'opus')
   assert.equal(second.answer, 'haiku')
+})
+
+test('fingerprint dedupe: advisor aliases that pin to the same model join', async () => {
+  let spawns = 0
+  const runner = async () => {
+    spawns += 1
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    return { ok: true, answer: 'pinned', meta: {} }
+  }
+  const service = createConsultationService({ settings: makeSettings(), runner })
+  const same = { sessionId: 'dedupe-pin', question: 'same q', context: 'same material', source: 'tool' }
+  const [first, second] = await Promise.all([
+    service.consult(ask({ ...same, model: 'opus' })),
+    service.consult(ask({ ...same, model: 'haiku' })),
+  ])
+  assert.equal(spawns, 1, 'advisor aliases that resolve to the pin must share one spawn')
+  assert.equal(first.answer, second.answer)
+  assert.equal(first.meta.effectiveModel, 'claude-opus-5')
 })
 
 test('fingerprint dedupe: a different effort is a different consultation', async () => {
