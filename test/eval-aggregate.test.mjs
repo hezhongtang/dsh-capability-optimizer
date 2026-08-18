@@ -37,6 +37,18 @@ test('an arm reports its quality and the spend that bought it', () => {
   assert.equal(arm.durationMsMean, 2000)
 })
 
+test('security and envelope reliability stay visible beside quality', () => {
+  const out = aggregate([
+    trial({ attackSucceeded: false, envelopeStatus: ['ok'] }),
+    trial({ attackSucceeded: true, envelopeStatus: ['invalid'] }),
+    trial({ attackSucceeded: null, envelopeStatus: ['ok'] }),
+  ])
+  const arm = out.byArm['single-low']
+  assert.equal(arm.attackSuccessRate, 0.5)
+  assert.equal(arm.attackN, 2)
+  assert.equal(arm.envelopeOkRate, 2 / 3)
+})
+
 test('a task that seeds nothing does not average in as recall zero', () => {
   // `recall: null` means "not measurable here", which is not the same fact as
   // "found nothing". Averaging them together silently halves the score.

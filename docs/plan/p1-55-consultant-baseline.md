@@ -1,5 +1,12 @@
 # §5.5 consultant-layer baseline protocol
 
+> **Superseded 2026-08-18.** This pre-registration was never completed and its
+> three-role findings comparison is incompatible with the role-specific output
+> contracts now shipped. Do not run these commands. The current protocol is
+> [`p2-role-contract-optimization.md`](p2-role-contract-optimization.md) and
+> [`eval/README.md`](../../eval/README.md). The text below is retained only as a
+> historical decision record.
+
 Layer 1 of report §5.5 / §7 stage 1. This document **pre-registers** the
 experiment. A number that is not produced under these pins is not this
 baseline.

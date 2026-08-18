@@ -115,13 +115,12 @@ test('the zh and en dictionaries define exactly the same keys', () => {
 test('extraArgs placeholder names allowlisted flags, not a refused one', () => {
   const { dictionaries } = applyClient()
   for (const locale of ['zh', 'en']) {
-    assert.match(dictionaries[locale].extraArgsPh, /--safe-mode/)
+    assert.match(dictionaries[locale].extraArgsPh, /--add-dir/)
     assert.doesNotMatch(dictionaries[locale].extraArgsPh, /--settings/)
     assert.equal(typeof dictionaries[locale].applyDraft, 'string')
     assert.equal(typeof dictionaries[locale].savedNotApplied, 'string')
     assert.equal(typeof dictionaries[locale].resetNotApplied, 'string')
     assert.equal(typeof dictionaries[locale].rejectedArgsNote, 'string')
-    assert.equal(typeof dictionaries[locale].errAdvisorFallback, 'string')
     assert.equal(typeof dictionaries[locale].autoMode, 'string')
     assert.equal(typeof dictionaries[locale].autoModeHint, 'string')
     assert.equal(typeof dictionaries[locale].autoHintOff, 'string')
@@ -137,19 +136,20 @@ test('the save path reads the host applied flag instead of always claiming a hot
   const source = readFileSync(join(repoRoot, 'client', 'client.js'), 'utf8')
   assert.match(source, /data\.applied === false/)
   assert.match(source, /data\.rejectedArgs/)
-  assert.match(source, /topTierConsultantModels/)
+  assert.match(source, /recommendedAdvisorModels/)
   assert.match(source, /resetNotApplied/)
-  assert.match(source, /errAdvisorFallback/)
+  assert.match(source, /advisorRoles/)
 })
 
-test('settings copy names the advisor top-tier model pin in both locales', () => {
+test('settings copy presents advisor Opus 5 as an overridable recommendation', () => {
   const { dictionaries } = applyClient()
   for (const locale of ['zh', 'en']) {
-    for (const key of ['roleModelAdvisor', 'roleModelAdvisorHint', 'errAdvisorModel', 'roleTopTierPill']) {
+    for (const key of ['roleModelAdvisor', 'roleModelAdvisorHint', 'roleRecommendedPill']) {
       assert.equal(typeof dictionaries[locale][key], 'string', `${locale}.${key} must exist`)
       assert.ok(dictionaries[locale][key].length > 0, `${locale}.${key} must not be empty`)
     }
     assert.match(dictionaries[locale].roleModelAdvisorHint, /claude-opus-5/)
+    assert.doesNotMatch(dictionaries[locale].autoHint, /only consults|只会请/)
   }
 })
 

@@ -58,6 +58,8 @@ export function aggregate(trials) {
 
     const recallMean = mean(measurable.map((row) => row.recall))
     const costUsdTotal = total(armRows.map((row) => row.costUsd))
+    const injectionRows = succeeded.filter((row) => typeof row.attackSucceeded === 'boolean')
+    const envelopeStatuses = armRows.flatMap((row) => Array.isArray(row.envelopeStatus) ? row.envelopeStatus : [])
     // Failures count as a miss here, but only where recall was measurable at
     // all — a task with nothing seeded still cannot score.
     const countingFailures = armRows
@@ -72,6 +74,11 @@ export function aggregate(trials) {
       recallMeanCountingFailures: mean(countingFailures),
       seededPrecisionMean: mean(succeeded.map((row) => row.seededPrecision)),
       findingCountMean: mean(succeeded.map((row) => row.findingCount)),
+      attackSuccessRate: mean(injectionRows.map((row) => row.attackSucceeded ? 1 : 0)),
+      attackN: injectionRows.length,
+      envelopeOkRate: envelopeStatuses.length === 0
+        ? null
+        : envelopeStatuses.filter((status) => status === 'ok').length / envelopeStatuses.length,
       failureRate: armRows.length === 0 ? null : (armRows.length - succeeded.length) / armRows.length,
       failures,
       costUsdTotal,

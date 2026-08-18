@@ -18,14 +18,13 @@ function makeSettings(overrides = {}) {
   return effectiveSettings(normalizeConfig({}), file)
 }
 
-const ask = (extra = {}) => ({ role: 'advisor', question: 'is this sound?', ...extra })
+const ask = (extra = {}) => ({ role: 'reviewer', question: 'is this sound?', ...extra })
 
 const REVISE = {
   verdict: 'revise',
   summary: 'guard the null path',
   findings: [{
     severity: 'high',
-    confidence: 0.86,
     location: 'lib/x.js:12',
     evidence: 'deref without a null check',
     impact: 'crash on empty input',
@@ -85,11 +84,25 @@ test('envelope degrade: unadvertised schema path stays raw and does not yield pa
   assert.equal(result.meta.envelopeStatus, 'raw')
 })
 
-test('packet bounds: an oversized artifact is truncated and recorded in checked_scope or unknowns', async () => {
+test('a CLI-resolved default model is reported as the effective model', async () => {
+  resetCliCapabilities()
+  const result = await withEnv({
+    FAKE_CLAUDE_MODE: 'ok',
+    FAKE_CLAUDE_MODEL: 'claude-sonnet-5',
+  }, () => createConsultationService({
+    settings: makeSettings({ cliPath: fakeClaudePath, model: '' }),
+  }).consult(ask({ model: '' })))
+
+  assert.equal(result.ok, true)
+  assert.equal(result.meta.requestedModel, '')
+  assert.equal(result.meta.effectiveModel, 'claude-sonnet-5')
+})
+
+test('packet bounds: an oversized artifact is truncated and recorded as an unknown', async () => {
   let stdin = ''
   const runner = async (options) => {
     stdin = options.userMessage
-    return { ok: true, answer: 'seen', meta: {} }
+    return { ok: true, answer: 'seen', meta: { structuredOutput: structuredClone(REVISE) } }
   }
   const result = await createConsultationService({ settings: makeSettings(), runner }).consult(ask({
     question: 'trim this',
@@ -101,12 +114,9 @@ test('packet bounds: an oversized artifact is truncated and recorded in checked_
   assert.match(stdin, /\[question\]/)
   assert.match(stdin, /UNTRUSTED EVIDENCE/)
   assert.match(stdin, /\[truncated\]/)
-  const overflow = [
-    ...(result.envelope?.checked_scope ?? []),
-    ...(result.envelope?.unknowns ?? []),
-    ...(result.meta.packetOverflow ?? []),
-  ]
+  const overflow = result.envelope.unknowns
   assert.ok(overflow.some((item) => /truncat/i.test(item)), `expected overflow record, got ${JSON.stringify(overflow)}`)
+  assert.equal(result.envelope.checked_scope.some((item) => /truncat/i.test(item)), false)
 })
 
 test('fingerprint dedupe: overlapping identical consults spawn once; a changed digest spawns again', async () => {
@@ -150,8 +160,8 @@ function collectingRunner(field) {
 }
 
 test('fingerprint dedupe: a different model is a different consultation', async () => {
-  // Reviewer is not capability-pinned; advisor would collapse both aliases
-  // onto claude-opus-5 and correctly join them.
+  // Every production role respects an explicit model choice; formal eval pins
+  // are enforced by eval/run.mjs instead of mutating live calls.
   const runner = collectingRunner('model')
   const service = createConsultationService({ settings: makeSettings(), runner: runner.run })
   const same = { sessionId: 'dedupe-model', role: 'reviewer', question: 'same q', context: 'same material', source: 'tool' }
@@ -166,22 +176,17 @@ test('fingerprint dedupe: a different model is a different consultation', async 
   assert.equal(second.answer, 'haiku')
 })
 
-test('fingerprint dedupe: advisor aliases that pin to the same model join', async () => {
-  let spawns = 0
-  const runner = async () => {
-    spawns += 1
-    await new Promise((resolve) => setTimeout(resolve, 40))
-    return { ok: true, answer: 'pinned', meta: {} }
-  }
-  const service = createConsultationService({ settings: makeSettings(), runner })
-  const same = { sessionId: 'dedupe-pin', question: 'same q', context: 'same material', source: 'tool' }
+test('fingerprint dedupe: distinct advisor model choices stay distinct', async () => {
+  const runner = collectingRunner('model')
+  const service = createConsultationService({ settings: makeSettings(), runner: runner.run })
+  const same = { sessionId: 'dedupe-pin', role: 'advisor', question: 'same q', context: 'same material', source: 'tool' }
   const [first, second] = await Promise.all([
     service.consult(ask({ ...same, model: 'opus' })),
     service.consult(ask({ ...same, model: 'haiku' })),
   ])
-  assert.equal(spawns, 1, 'advisor aliases that resolve to the pin must share one spawn')
-  assert.equal(first.answer, second.answer)
-  assert.equal(first.meta.effectiveModel, 'claude-opus-5')
+  assert.deepEqual([...runner.seen].sort(), ['haiku', 'opus'])
+  assert.equal(first.answer, 'opus')
+  assert.equal(second.answer, 'haiku')
 })
 
 test('fingerprint dedupe: a different effort is a different consultation', async () => {
@@ -219,4 +224,22 @@ test('fingerprint dedupe: a different objective is a different consultation', as
   assert.equal(packets.length, 2, 'a changed objective must not join another run')
   assert.ok(packets.some((text) => text.includes('ship the migration')))
   assert.ok(packets.some((text) => text.includes('unblock the release')))
+})
+
+test('fingerprint dedupe: different success criteria do not share an answer', async () => {
+  const packets = []
+  const runner = async (options) => {
+    packets.push(options.userMessage)
+    await new Promise((resolve) => setTimeout(resolve, 40))
+    return { ok: true, answer: 'seen', meta: {} }
+  }
+  const service = createConsultationService({ settings: makeSettings(), runner })
+  const same = { sessionId: 'dedupe-success', question: 'same q', context: 'same material', source: 'tool' }
+  await Promise.all([
+    service.consult(ask({ ...same, successCriteria: 'minimize latency' })),
+    service.consult(ask({ ...same, successCriteria: 'minimize migration risk' })),
+  ])
+  assert.equal(packets.length, 2)
+  assert.ok(packets.some((packet) => packet.includes('minimize latency')))
+  assert.ok(packets.some((packet) => packet.includes('minimize migration risk')))
 })

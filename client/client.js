@@ -12,8 +12,8 @@ var module = { exports: {} }; var exports = module.exports;
  *    delete, omp-style enabled flag that parks a role without dropping it),
  *    and the auto-consult defaults (checked set + per-role session cap);
  *  - a composer-seat toggle in the conversation input toolbar: check roles
- *    per session and the host proactively consults them (policy section +
- *    lifecycle nudges; see lib/autoconsult.js), with live usage counts.
+ *    per session and the host injects their selection policy and lifecycle
+ *    nudges (see lib/autoconsult.js), with live usage counts.
  *
  * Saves hot-apply on the host: the agent tools re-register immediately, no
  * dsh restart. Includes an end-to-end test call that really consults Claude
@@ -30,7 +30,7 @@ const NS = 'dsh-capability-optimizer'
 
 const zh = {
   nav: '专家咨询',
-  subtitle: '以角色人设无头（headless）调用 Claude Code，回复作为参考答案',
+  subtitle: '以明确的角色合同无头（headless）调用 Claude Code，回复作为参考答案',
   loading: '加载中…',
   loadFail: '加载失败',
   retry: '重试',
@@ -55,13 +55,12 @@ const zh = {
   maxTurns: 'CLI 内最大轮数',
   maxPanelRoles: '并行会诊角色上限',
   extraArgs: '附加 CLI 参数',
-  extraArgsPh: '空格分隔，如 --safe-mode 或 --add-dir /path',
+  extraArgsPh: '空格分隔，如 --disable-slash-commands 或 --add-dir /path',
   rejectedArgsNote: '已忽略不安全参数：{args}',
   validationProblems: '设置文件未通过校验（已回退到组合配置）：{problems}',
-  repairsNote: '顾问模型已自动对齐顶级模型：{repairs}',
+  repairsNote: '设置已迁移：{repairs}',
   savedNotApplied: '已写入磁盘，但咨询工具没有重注册（没有 tools 服务或名册为空）',
   resetNotApplied: '已恢复默认文件，但咨询工具没有重注册',
-  errAdvisorFallback: 'Advisor 回退模型也必须是顶级模型（claude-opus-5）',
   autoHintOff: '当前模式为关闭：勾选不会写入政策，也不会催办。',
   acDropped: '未生效：{keys}',
   testUsedRole: '实际角色 {role}',
@@ -71,7 +70,7 @@ const zh = {
   autoModeOff: '关闭',
   autoModeRemind: '提醒（默认）',
   autoModeRequired: '加强提醒',
-  autoModeHint: 'required 会写更硬的政策，并在写文件时打日志。主机没有拦截写工具的 API，并不能真正拦住 Write。',
+  autoModeHint: 'hard-remind 会写更醒目的政策；启用 designer 时，若未先咨询就写文件，会记录一次错过的 designer 检查点。它不会声称拦住了 Write。旧 required 设置会自动迁移。',
   rolesTitle: '角色',
   rolesHint: '停用的角色保留在册但不出现在工具枚举中（omp 风格）',
   addRole: '新增角色',
@@ -80,11 +79,15 @@ const zh = {
   roleLabel: '显示名（可选）',
   roleDesc: '用途说明（何时选它）',
   rolePrompt: '角色提示词（systemPrompt）',
+  roleOutputKind: '输出合同',
+  roleKindAdvisor: '决策顾问',
+  roleKindReviewer: '缺陷评审',
+  roleKindDesigner: '架构设计',
+  roleKindGeneral: '通用建议',
   roleModel: '专属模型（可选）',
-  roleModelAdvisor: '顾问模型（须强于 DSH 主模型）',
-  roleModelAdvisorHint: 'Advisor 是高智能角色。请来的模型必须比干活的 DSH 主模型更强，否则咨询没有意义。请钉死 claude-opus-5。',
-  errAdvisorModel: 'Advisor 必须使用顶级模型（claude-opus-5）',
-  roleTopTierPill: '顶级模型',
+  roleModelAdvisor: '顾问模型（默认推荐 Opus 5）',
+  roleModelAdvisorHint: '内置 Advisor 默认使用 claude-opus-5，以提高建议质量；这是一项可覆盖的质量默认值，不是角色名触发的硬性禁令。正式对照实验仍应固定完整模型 ID。',
+  roleRecommendedPill: '推荐默认值',
   roleFallback: '专属回退模型（可选）',
   roleEffort: '专属推理等级（可选）',
   enabled: '启用',
@@ -127,7 +130,7 @@ const zh = {
   errAllDisabled: '至少启用一个角色',
   errNumberRange: '数值超出允许范围',
   autoTitle: '自动咨询',
-  autoHint: '在提醒 / 加强提醒模式下，勾选的角色会写入政策并在关键节点催办。关闭模式不会催办。每次调用消耗 Claude 订阅额度。Advisor 只会请顶级模型（claude-opus-5）。',
+  autoHint: '在提醒 / 加强提醒模式下，勾选的角色会写入政策并在关键节点催办；它不会自动调用或拦截写入。每次真实咨询都会消耗 Claude 订阅额度。',
   autoCap: '每角色每会话调用上限',
   autoDefaultsHint: '这里是默认勾选集；聊天框开关可按会话临时覆盖',
   acTooltip: '专家咨询 · 自动',
@@ -153,7 +156,7 @@ const zh = {
 
 const en = {
   nav: 'Expert Consult',
-  subtitle: 'Headless Claude Code consultations with role personas; replies land as reference answers',
+  subtitle: 'Headless Claude Code consultations with explicit role contracts; replies land as reference answers',
   loading: 'Loading…',
   loadFail: 'Failed to load',
   retry: 'Retry',
@@ -178,13 +181,12 @@ const en = {
   maxTurns: 'Max turns inside CLI',
   maxPanelRoles: 'Max panel roles',
   extraArgs: 'Extra CLI args',
-  extraArgsPh: 'space-separated, e.g. --safe-mode or --add-dir /path',
+  extraArgsPh: 'space-separated, e.g. --disable-slash-commands or --add-dir /path',
   rejectedArgsNote: 'Ignored unsafe args: {args}',
   validationProblems: 'Settings file failed validation (fell back to composition config): {problems}',
-  repairsNote: 'Advisor model was aligned to the top-tier pin: {repairs}',
+  repairsNote: 'Settings migrated: {repairs}',
   savedNotApplied: 'Saved to disk, but consultation tools did not re-register (no tools service or empty roster)',
   resetNotApplied: 'Defaults restored on disk, but consultation tools did not re-register',
-  errAdvisorFallback: 'Advisor fallback must also be a top-tier model (claude-opus-5)',
   autoHintOff: 'Mode is off: checking roles does not write policy and does not nudge.',
   acDropped: 'Not in force: {keys}',
   testUsedRole: 'actual role {role}',
@@ -193,8 +195,8 @@ const en = {
   autoMode: 'Trigger mode',
   autoModeOff: 'Off',
   autoModeRemind: 'Remind (default)',
-  autoModeRequired: 'Harder reminder',
-  autoModeHint: 'required writes a harder policy and logs on write tools. The host has no pre-execute hook, so Write is not actually blocked.',
+  autoModeRequired: 'Hard reminder',
+  autoModeHint: 'hard-remind writes a stronger policy and, when designer is enabled, logs one missed designer checkpoint if files are written before it answers; it never claims Write was blocked. Legacy required settings migrate automatically.',
   rolesTitle: 'Roles',
   rolesHint: 'A disabled role stays in the roster but leaves the tools\' enum (omp-style)',
   addRole: 'Add role',
@@ -203,11 +205,15 @@ const en = {
   roleLabel: 'Display label (optional)',
   roleDesc: 'Description (when to pick it)',
   rolePrompt: 'Role system prompt',
+  roleOutputKind: 'Output contract',
+  roleKindAdvisor: 'Decision advisor',
+  roleKindReviewer: 'Defect reviewer',
+  roleKindDesigner: 'Architecture designer',
+  roleKindGeneral: 'General advice',
   roleModel: 'Dedicated model (optional)',
-  roleModelAdvisor: 'Advisor model (must outrank the DSH manager)',
-  roleModelAdvisorHint: 'Advisor is a high-intelligence role. The advice-giver must be a stronger coding model than the DSH agent doing the work, or the consult is not worth running. Pin claude-opus-5.',
-  errAdvisorModel: 'Advisor needs a top-tier model (claude-opus-5)',
-  roleTopTierPill: 'top-tier model',
+  roleModelAdvisor: 'Advisor model (Opus 5 recommended)',
+  roleModelAdvisorHint: 'The built-in Advisor defaults to claude-opus-5 as a quality preference. It is user-overridable, not a role-name-based prohibition. Formal comparisons should still pin a full model id.',
+  roleRecommendedPill: 'recommended default',
   roleFallback: 'Dedicated fallback model (optional)',
   roleEffort: 'Dedicated thinking effort (optional)',
   enabled: 'Enabled',
@@ -250,7 +256,7 @@ const en = {
   errAllDisabled: 'At least one role must stay enabled',
   errNumberRange: 'Value out of range',
   autoTitle: 'Auto consult',
-  autoHint: 'In remind / harder-reminder mode, checked roles ride the policy and get nudged at key points. Off mode does not nudge. Each call spends Claude subscription quota. Advisor only consults a top-tier model (claude-opus-5).',
+  autoHint: 'In remind / hard-remind mode, checked roles ride the policy and get nudged at key points; the plugin neither auto-invokes them nor blocks writes. Each real consultation spends Claude subscription quota.',
   autoCap: 'Per-role calls per session',
   autoDefaultsHint: 'This is the default checked set; the composer toggle overrides it per session',
   acTooltip: 'Expert consult · auto',
@@ -289,26 +295,26 @@ const BUILTIN_DESC_KEYS = {
   designer: 'builtinDescDesigner',
 }
 
-/** Fallback only — GET /settings publishes the live lists from lib/consultant-model.js. */
-const TOP_TIER_CONSULTANT_MODELS = ['claude-opus-5']
-const HIGH_INTELLECT_ROLES = new Set(['advisor'])
+/** Fallback only — GET /settings publishes the live recommendation metadata. */
+const RECOMMENDED_ADVISOR_MODELS = ['claude-opus-5']
+const ADVISOR_ROLES = new Set(['advisor'])
 
-function topTierModels(loaded) {
-  const list = loaded?.topTierConsultantModels
-  return Array.isArray(list) && list.length > 0 ? list : TOP_TIER_CONSULTANT_MODELS
+function recommendedAdvisorModels(loaded) {
+  const list = loaded?.recommendedAdvisorModels ?? loaded?.topTierConsultantModels
+  return Array.isArray(list) && list.length > 0 ? list : RECOMMENDED_ADVISOR_MODELS
 }
 
-function highIntellectRoles(loaded) {
-  const list = loaded?.highIntellectRoles
-  return new Set(Array.isArray(list) && list.length > 0 ? list : [...HIGH_INTELLECT_ROLES])
+function advisorRoles(loaded) {
+  const list = loaded?.advisorRoles ?? loaded?.highIntellectRoles
+  return new Set(Array.isArray(list) && list.length > 0 ? list : [...ADVISOR_ROLES])
 }
 
 function roleSlug(name) {
   return String(name ?? '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/^-+|-+$/g, '')
 }
 
-function isHighIntellectRoleName(name, loaded) {
-  return highIntellectRoles(loaded).has(roleSlug(name))
+function isAdvisorRoleName(name, loaded) {
+  return advisorRoles(loaded).has(roleSlug(name))
 }
 // Reserved-backend notes are UI copy, so they live in the dictionaries (the
 // host catalog carries no locale); the host note stays as a fallback for ids
@@ -482,34 +488,27 @@ function NumberField({ label, value, onChange, max, min = 1, step }) {
  * stored value outside the catalog (set by an older release or by hand)
  * still renders through a passthrough option instead of vanishing.
  */
-function ModelField({ label, value, t, models, onChange, allowed, required }) {
+function ModelField({ label, value, t, models, onChange }) {
   const catalog = models ?? { aliases: [], versioned: [] }
-  const allow = Array.isArray(allowed) ? new Set(allowed) : null
-  const aliases = allow ? catalog.aliases.filter((m) => allow.has(m)) : catalog.aliases
-  const versioned = allow ? catalog.versioned.filter((m) => allow.has(m)) : catalog.versioned
-  const known = new Set([...(required ? [] : ['']), ...aliases, ...versioned, ...(allow ? [...allow] : [])])
+  const aliases = catalog.aliases
+  const versioned = catalog.versioned
+  const known = new Set(['', ...aliases, ...versioned])
   const extra = value !== '' && !known.has(value)
   const opt = (v, optionLabel, group) => h('option', { key: `g${group}:${v}`, value: v }, optionLabel)
-  const selectValue = required && (value === '' || value == null) && allow && allow.size > 0
-    ? [...allow][0]
-    : value
   return h('div', { className: 'dco-field' },
     h('label', null, label),
     h('select', {
       className: 'dco-input',
       style: { fontFamily: 'var(--ds-font-family-code)' },
-      value: selectValue,
+      value,
       onChange: (e) => onChange(e.target.value),
     },
-      required ? null : opt('', t('modelDefault'), 'd'),
+      opt('', t('modelDefault'), 'd'),
       extra ? opt(value, `${t('modelCurrent')}: ${value}`, 'x') : null,
       aliases.length > 0 ? h('optgroup', { key: 'ga', label: t('modelGroupLatest') },
         aliases.map((m) => opt(m, m, 'a'))) : null,
       versioned.length > 0 ? h('optgroup', { key: 'gv', label: t('modelGroupVersioned') },
-        versioned.map((m) => opt(m, m, 'v'))) : null,
-      allow && versioned.length === 0 && aliases.length === 0
-        ? [...allow].map((m) => opt(m, m, 't'))
-        : null))
+        versioned.map((m) => opt(m, m, 'v'))) : null))
 }
 
 const EFFORT_OPTIONS = [
@@ -528,6 +527,20 @@ function EffortField({ label, value, t, onChange }) {
       EFFORT_OPTIONS.map(([v, key]) => h('option', { key: v || 'default', value: v }, t(key)))))
 }
 
+const ROLE_KIND_OPTIONS = [
+  ['advisor', 'roleKindAdvisor'],
+  ['reviewer', 'roleKindReviewer'],
+  ['designer', 'roleKindDesigner'],
+  ['general', 'roleKindGeneral'],
+]
+
+function RoleKindField({ value, t, onChange }) {
+  return h('div', { className: 'dco-field' },
+    h('label', null, t('roleOutputKind')),
+    h('select', { className: 'dco-input', value: value ?? 'general', onChange: (e) => onChange(e.target.value) },
+      ROLE_KIND_OPTIONS.map(([kind, key]) => h('option', { key: kind, value: kind }, t(key)))))
+}
+
 function Switch({ on, onToggle, title }) {
   return h('button', {
     className: `dco-switch${on ? ' on' : ''}`, title, type: 'button',
@@ -535,7 +548,7 @@ function Switch({ on, onToggle, title }) {
   })
 }
 
-function RoleEditor({ role, isNew, t, models, names, onSave, onClose, topTier = TOP_TIER_CONSULTANT_MODELS }) {
+function RoleEditor({ role, isNew, t, models, names, onSave, onClose }) {
   const [draft, setDraft] = useState(role)
   const [problem, setProblem] = useState('')
   // Functional updates throughout: rapid batched input events must each build
@@ -547,17 +560,8 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose, topTier = 
     if (name.length === 0) { setProblem(t('nameRequired')); return }
     if (names.has(name)) { setProblem(`${t('errDupRole')}: ${name}`); return }
     if (draft.enabled !== false && String(draft.systemPrompt ?? '').trim().length === 0) { setProblem(t('requiredPrompt')); return }
-    const model = isHighIntellectRoleName(name)
-      ? (String(draft.model ?? '').trim() || topTier[0])
-      : draft.model
-    if (isHighIntellectRoleName(name) && draft.enabled !== false && !topTier.includes(model)) {
-      setProblem(t('errAdvisorModel'))
-      return
-    }
-    const fallbackModel = isHighIntellectRoleName(name)
-      ? (topTier.includes(String(draft.fallbackModel ?? '').trim()) ? draft.fallbackModel : '')
-      : draft.fallbackModel
-    onSave({ ...draft, name, model, fallbackModel })
+    const outputKind = ROLE_KIND_OPTIONS.some(([kind]) => kind === draft.outputKind) ? draft.outputKind : 'general'
+    onSave({ ...draft, name, outputKind })
   }
 
   return h('div', { className: 'dco-modal-bg', onClick: onClose },
@@ -569,6 +573,7 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose, topTier = 
         h(TextField, { label: t('roleName'), value: draft.name ?? '', onChange: set('name'), mono: true }),
         h(TextField, { label: t('roleLabel'), value: draft.label ?? '', onChange: set('label') }),
         h(TextField, { label: t('roleDesc'), value: draft.description ?? '', onChange: set('description') }),
+        h(RoleKindField, { value: draft.outputKind, t, onChange: set('outputKind') }),
         h('div', { className: 'dco-field' },
           h('label', null, t('rolePrompt')),
           h('textarea', {
@@ -576,23 +581,17 @@ function RoleEditor({ role, isNew, t, models, names, onSave, onClose, topTier = 
             onChange: (e) => set('systemPrompt')(e.target.value),
           })),
         h('div', { className: 'dco-grid' },
-          isHighIntellectRoleName(draft.name)
-            ? h(ModelField, {
-              label: t('roleModelAdvisor'),
-              value: draft.model || topTier[0],
-              t, models, allowed: topTier, required: true,
-              onChange: set('model'),
-            })
-            : h(ModelField, { label: t('roleModel'), value: draft.model ?? '', t, models, onChange: set('model') }),
+          h(ModelField, {
+            label: isAdvisorRoleName(draft.name) ? t('roleModelAdvisor') : t('roleModel'),
+            value: draft.model ?? '', t, models, onChange: set('model'),
+          }),
           h(ModelField, {
             label: t('roleFallback'),
             value: draft.fallbackModel ?? '',
-            t, models,
-            allowed: isHighIntellectRoleName(draft.name) ? topTier : undefined,
-            onChange: set('fallbackModel'),
+            t, models, onChange: set('fallbackModel'),
           }),
           h(EffortField, { label: t('roleEffort'), value: draft.effort ?? '', t, onChange: set('effort') })),
-        isHighIntellectRoleName(draft.name)
+        isAdvisorRoleName(draft.name)
           ? h('p', { className: 'dco-hint' }, t('roleModelAdvisorHint'))
           : null,
         problem ? h('div', { className: 'dco-status err' }, problem) : null),
@@ -916,15 +915,6 @@ function Section({ t }) {
       if (draft.roles.every((r) => r.enabled === false)) problems.push(t('errAllDisabled'))
       for (const r of draft.roles) {
         if (r.enabled !== false && String(r.systemPrompt ?? '').trim().length === 0) problems.push(`${t('requiredPrompt')}: ${r.name}`)
-        if (r.enabled !== false && isHighIntellectRoleName(r.name, loaded)
-          && !topTierModels(loaded).includes(r.model || topTierModels(loaded)[0])) {
-          problems.push(`${t('errAdvisorModel')}: ${r.name}`)
-        }
-        if (r.enabled !== false && isHighIntellectRoleName(r.name, loaded)
-          && String(r.fallbackModel ?? '').trim().length > 0
-          && !topTierModels(loaded).includes(String(r.fallbackModel).trim())) {
-          problems.push(`${t('errAdvisorFallback')}: ${r.name}`)
-        }
       }
     }
     for (const [key, max] of [['timeoutMs', 3600000], ['maxTurns', 3600000], ['maxPanelRoles', 32]]) {
@@ -1055,13 +1045,15 @@ function Section({ t }) {
         h('h3', { style: { margin: 0 } }, t('rolesTitle')),
         h('span', { className: 'dco-hint' }, t('rolesHint')),
         h('span', { style: { marginLeft: 'auto' } },
-          h('button', { className: 'dco-btn', onClick: () => setEditing({ role: { name: '', label: '', description: '', systemPrompt: '', model: '', fallbackModel: '', enabled: true }, isNew: true }) }, `+ ${t('addRole')}`))),
+          h('button', { className: 'dco-btn', onClick: () => setEditing({ role: { name: '', outputKind: 'general', label: '', description: '', systemPrompt: '', model: '', fallbackModel: '', enabled: true }, isNew: true }) }, `+ ${t('addRole')}`))),
       h('div', { className: 'dco-roles' },
         draft.roles.map((role, index) => {
           const meta = []
+          const kindLabel = ROLE_KIND_OPTIONS.find(([kind]) => kind === role.outputKind)?.[1] ?? 'roleKindGeneral'
+          meta.push(h('span', { key: 'k', className: 'dco-pill' }, `${t('roleOutputKind')}: ${t(kindLabel)}`))
           if (role.model) meta.push(h('span', { key: 'm', className: 'dco-pill' }, `${t('roleModelPill')}: ${role.model}`))
-          if (isHighIntellectRoleName(role.name, loaded) && topTierModels(loaded).includes(role.model)) {
-            meta.push(h('span', { key: 'tt', className: 'dco-pill tag' }, t('roleTopTierPill')))
+          if (isAdvisorRoleName(role.name, loaded) && recommendedAdvisorModels(loaded).includes(role.model)) {
+            meta.push(h('span', { key: 'rec', className: 'dco-pill tag' }, t('roleRecommendedPill')))
           }
           if (role.fallbackModel) meta.push(h('span', { key: 'f', className: 'dco-pill' }, `${t('roleFallbackPill')}: ${role.fallbackModel}`))
           if (role.effort) meta.push(h('span', { key: 'e', className: 'dco-pill' }, `${t('roleEffortPill')}: ${role.effort}`))
@@ -1110,12 +1102,12 @@ function Section({ t }) {
           h('label', null, t('autoMode')),
           h('select', {
             className: 'dco-input',
-            value: auto.mode === 'off' || auto.mode === 'required' ? auto.mode : 'remind',
+            value: auto.mode === 'off' || auto.mode === 'hard-remind' ? auto.mode : 'remind',
             onChange: (e) => setAuto((prev) => ({ ...prev, mode: e.target.value })),
           },
             h('option', { value: 'off' }, t('autoModeOff')),
             h('option', { value: 'remind' }, t('autoModeRemind')),
-            h('option', { value: 'required' }, t('autoModeRequired'))))),
+            h('option', { value: 'hard-remind' }, t('autoModeRequired'))))),
       h('p', { className: 'dco-hint' }, t('autoModeHint'))),
 
     h(TestPanel, { t, roles: loaded.effective?.roles ?? draft.roles }),
@@ -1128,7 +1120,6 @@ function Section({ t }) {
 
     editing !== null && h(RoleEditor, {
       role: editing.role, isNew: editing.isNew, t, models: loaded.models,
-      topTier: topTierModels(loaded),
       names: new Set(draft.roles.filter((r) => r !== editing.role).map((r) => r.name)),
       onClose: () => setEditing(null),
       onSave: (role) => {

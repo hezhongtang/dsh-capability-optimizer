@@ -36,7 +36,7 @@ function freshProbe() {
 test('a successful run returns the answer and the CLI metadata', async () => {
   freshProbe()
   const { value, record } = await withRecord(() =>
-    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_ANSWER: 'the reference answer' }, () =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_ANSWER: 'the reference answer', FAKE_CLAUDE_MODEL: 'claude-sonnet-5' }, () =>
       runClaudeConsult(consultOptions())))
 
   assert.equal(value.ok, true)
@@ -44,10 +44,23 @@ test('a successful run returns the answer and the CLI metadata', async () => {
   assert.equal(value.meta.sessionId, 'fake-session-0001')
   assert.equal(value.meta.numTurns, 2)
   assert.equal(value.meta.costUsd, 0.0042)
+  assert.equal(value.meta.actualModel, 'claude-sonnet-5')
+  assert.deepEqual(value.meta.actualModels, ['claude-sonnet-5'])
   assert.equal(record.stdin, 'PING')
   assert.deepEqual(record.argv.slice(0, 5), [
     '-p', '--output-format', 'json', '--append-system-prompt', 'You are a test persona.',
   ])
+})
+
+test('multiple CLI-reported models remain visible without inventing one effective model', async () => {
+  freshProbe()
+  const { value } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_MODELS: 'claude-opus-5,claude-sonnet-5' }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  assert.equal(value.meta.actualModel, undefined)
+  assert.deepEqual(value.meta.actualModels, ['claude-opus-5', 'claude-sonnet-5'])
 })
 
 /**
@@ -71,6 +84,7 @@ Options:
   --disallowedTools, --disallowed-tools <tools...>  Tools denied
   --tools <tools...>              Specify the list of available tools
   --setting-sources <sources>     Comma-separated list of setting sources to load (user, project, local)
+  --safe-mode                     Disable customizations while preserving auth
   --strict-mcp-config             Only use MCP servers from --mcp-config,
                                   ignoring all other MCP configurations
   --permission-mode <mode>        Permission mode to use for the session
@@ -125,11 +139,23 @@ test("the stub's default help matches the installed CLI's flag surface", async (
     noSessionPersistence: true,
     maxBudgetUsd: true,
     settingSources: true,
+    safeMode: true,
     jsonSchema: true,
     strictMcpConfig: true,
     permissionModes: ['acceptEdits', 'auto', 'bypassPermissions', 'manual', 'dontAsk', 'plan'],
     probed: true,
   })
+})
+
+test('an advertised --safe-mode disables hooks and other customizations without replacing auth', async () => {
+  freshProbe()
+  const { value, record } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_HELP: MODERN_HELP }, () =>
+      runClaudeConsult(consultOptions())))
+
+  assert.equal(value.ok, true)
+  assert.ok(record.argv.includes('--safe-mode'))
+  assert.equal(value.meta.safeMode, true)
 })
 
 /**
@@ -318,6 +344,10 @@ test('an unadvertised --json-schema flag is skipped and the run still succeeds',
 
   assert.equal(value.ok, true)
   assert.ok(!record.argv.includes('--json-schema'))
+  const prompt = record.argv[record.argv.indexOf('--append-system-prompt') + 1]
+  assert.match(prompt, /cannot enforce structured output/)
+  assert.match(prompt, /"findings"/)
+  assert.equal(value.meta.schemaInPrompt, true, 'prompt fallback is observable and never mislabeled as enforcement')
 })
 
 test('the capability probe is cached per CLI path', async () => {

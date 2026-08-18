@@ -385,7 +385,7 @@ test('off mode arms neither designer nor reviewer', () => {
   assert.equal(runtime.consumeNudge('s1'), null)
   assert.equal(runtime.reviewerGate('s1'), null)
   assert.equal(runtime.policyText('s1'), '')
-  assert.equal(runtime.refuseWrite('s1', 'Write').refuse, false)
+  assert.equal(runtime.writeCheckpoint('s1', 'Write').missed, false)
 })
 
 test('remind mode (the default) still only nudges and never refuses a write', () => {
@@ -394,17 +394,19 @@ test('remind mode (the default) still only nudges and never refuses a write', ()
   runtime.onWriteTool('s1', 'Write')
   assert.deepEqual(runtime.consumeNudge('s1'), ['designer'])
   assert.deepEqual(runtime.reviewerGate('s1'), ['reviewer'])
-  assert.equal(runtime.refuseWrite('s1', 'Write').refuse, false)
-  assert.match(runtime.policyText('s1'), /after the first file write of a turn/)
-  assert.doesNotMatch(runtime.policyText('s1'), /before the first write/)
+  assert.equal(runtime.writeCheckpoint('s1', 'Write').missed, false)
+  assert.match(runtime.policyText('s1'), /before significant new code/)
+  assert.match(runtime.policyText('s1'), /post-write architecture checkpoint/)
 })
 
-test('required policy text does not claim the host blocks writes', () => {
-  const { runtime } = makeRuntime({ enabled: ['claude-code:reviewer'], mode: 'required' })
+test('hard-remind policy text does not claim the host blocks writes', () => {
+  const { runtime } = makeRuntime({ enabled: ['claude-code:reviewer'], mode: 'hard-remind' })
   const text = runtime.policyText('s1')
-  assert.match(text, /required/)
-  assert.match(text, /logged, not blocked|cannot intercept/i)
-  assert.doesNotMatch(text, /refuses one write until/)
+  assert.match(text, /hard-remind/)
+  assert.match(text, /logged|never presented as a blocked write/i)
+  assert.doesNotMatch(text, /refuses one write until|required/)
+  assert.match(text, /not a blanket call requirement/)
+  assert.doesNotMatch(text, /expected, not optional/)
 })
 
 test('parseToolArguments accepts objects and JSON strings', () => {
@@ -415,15 +417,25 @@ test('parseToolArguments accepts objects and JSON strings', () => {
   assert.deepEqual(parseToolArguments(null), {})
 })
 
-test('required refuses one write-family tool before a success this turn and then allows it', () => {
-  const { runtime } = makeRuntime({ enabled: ['claude-code:reviewer'], mode: 'required' })
+test('hard-remind records one missed write checkpoint without pretending to refuse it', () => {
+  const { runtime } = makeRuntime({ enabled: ['claude-code:designer', 'claude-code:reviewer'], mode: 'hard-remind' })
   runtime.onTurnStart('s1')
-  const first = runtime.refuseWrite('s1', 'Write')
-  assert.equal(first.refuse, true)
-  assert.match(first.reason, /required/)
-  assert.equal(runtime.refuseWrite('s1', 'Edit').refuse, false, 'only one refusal per turn')
+  const first = runtime.writeCheckpoint('s1', 'Write')
+  assert.equal(first.missed, true)
+  assert.match(first.reason, /observed, not blocked/)
+  assert.equal(runtime.writeCheckpoint('s1', 'Edit').missed, false, 'only one diagnostic per turn')
 
   runtime.onTurnStart('s2')
   consult(runtime, 's2', 'reviewer', 'success')
-  assert.equal(runtime.refuseWrite('s2', 'Write').refuse, false, 'a success this turn lifts the refuse')
+  assert.equal(runtime.writeCheckpoint('s2', 'Write').missed, true, 'another role cannot satisfy the designer checkpoint')
+
+  runtime.onTurnStart('s3')
+  consult(runtime, 's3', 'designer', 'success')
+  assert.equal(runtime.writeCheckpoint('s3', 'Write').missed, false, 'a designer answer this turn closes its checkpoint')
+})
+
+test('hard-remind does not invent a designer checkpoint when designer is disabled', () => {
+  const { runtime } = makeRuntime({ enabled: ['claude-code:reviewer'], mode: 'hard-remind' })
+  runtime.onTurnStart('s1')
+  assert.equal(runtime.writeCheckpoint('s1', 'Write').missed, false)
 })

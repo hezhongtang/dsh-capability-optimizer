@@ -49,6 +49,12 @@ function samePath(a, b) {
   return base(a) === base(b)
 }
 
+/** `Line 21` is not a path; `cache.js`, `src/cache.js`, and Windows paths are. */
+function recognizablePath(value) {
+  return typeof value === 'string'
+    && (/[\\/]/.test(value) || /\.[a-z0-9_-]+(?:$|[:#])/i.test(value))
+}
+
 /** All the prose a finding carries, lowercased, for vocabulary matching. */
 function findingText(finding) {
   return [finding?.location, finding?.evidence, finding?.impact, finding?.minimal_action]
@@ -58,9 +64,10 @@ function findingText(finding) {
 }
 
 /** Does this finding identify this seeded defect? */
-function matches(finding, bug, lineWindow) {
+function matches(finding, bug, lineWindow, onlyFile) {
   const place = parseLocation(finding?.location)
-  if (!samePath(place.file, bug.file)) return false
+  const file = !recognizablePath(place.file) && onlyFile !== null ? onlyFile : place.file
+  if (!samePath(file, bug.file)) return false
   if (place.line !== null && Number.isFinite(bug.line) && Math.abs(place.line - bug.line) > lineWindow) return false
 
   const keywords = Array.isArray(bug.keywords) ? bug.keywords : []
@@ -75,7 +82,7 @@ function matches(finding, bug, lineWindow) {
  *
  * @param {Array<object>} findings - envelope findings, as returned by the plugin.
  * @param {Array<{id: string, file: string, line?: number, keywords?: string[]}>} bugs
- * @param {{ lineWindow?: number }} [options]
+ * @param {{ lineWindow?: number, files?: string[] }} [options]
  * @returns {{
  *   found: Array<{ bugId: string, finding: object }>,
  *   missed: string[],
@@ -91,6 +98,10 @@ export function scoreFindings(findings, bugs, options = {}) {
   const lineWindow = Number.isFinite(options.lineWindow) ? options.lineWindow : DEFAULT_LINE_WINDOW
   const list = Array.isArray(findings) ? findings.filter((entry) => entry !== null && typeof entry === 'object') : []
   const seeded = Array.isArray(bugs) ? bugs : []
+  const taskFiles = Array.isArray(options.files)
+    ? [...new Set(options.files.filter((file) => typeof file === 'string' && file.length > 0))]
+    : [...new Set(seeded.map((bug) => bug?.file).filter((file) => typeof file === 'string' && file.length > 0))]
+  const onlyFile = taskFiles.length === 1 ? taskFiles[0] : null
 
   const found = []
   const claimed = new Set()
@@ -100,7 +111,7 @@ export function scoreFindings(findings, bugs, options = {}) {
   // most one finding: without both, a single vague finding that name-drops
   // every keyword would score full recall.
   for (const bug of seeded) {
-    const hit = list.findIndex((entry, index) => !claimed.has(index) && matches(entry, bug, lineWindow))
+    const hit = list.findIndex((entry, index) => !claimed.has(index) && matches(entry, bug, lineWindow, onlyFile))
     if (hit === -1) continue
     claimed.add(hit)
     takenBugs.add(bug.id)

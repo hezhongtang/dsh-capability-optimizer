@@ -69,13 +69,13 @@ test('a refused boolean keeps its successor visible as a positional', () => {
 })
 
 test('a refused variadic flag swallows all of its values', () => {
-  const result = filterExtraArgs(['--allowedTools', 'Bash', 'Edit', 'Write', '--safe-mode'])
-  assert.deepEqual(result.args, ['--safe-mode'])
+  const result = filterExtraArgs(['--allowedTools', 'Bash', 'Edit', 'Write', '--disable-slash-commands'])
+  assert.deepEqual(result.args, ['--disable-slash-commands'])
   assert.deepEqual(result.rejected.map((entry) => entry.arg), ['--allowedTools'])
 })
 
 test('allowed args reach argv unchanged', () => {
-  const argv = ['--add-dir', '/srv/project', '--safe-mode', '--autocompact', 'auto']
+  const argv = ['--add-dir', '/srv/project', '--disable-slash-commands', '--autocompact', 'auto']
   const result = filterExtraArgs(argv)
   assert.deepEqual(result.args, argv)
   assert.deepEqual(result.rejected, [])
@@ -102,6 +102,13 @@ test('--strict-mcp-config is refused because the runner owns it', () => {
   assert.match(result.rejected[0].reason, /automatically/)
 })
 
+test('--safe-mode is refused in extraArgs because the runner feature-detects and owns it', () => {
+  const result = filterExtraArgs(['--safe-mode'])
+  assert.deepEqual(result.args, [])
+  assert.equal(result.rejected[0].arg, '--safe-mode')
+  assert.match(result.rejected[0].reason, /automatically/)
+})
+
 test('--strict-mcp-config takes no value, so a following token is not swallowed', () => {
   const result = filterExtraArgs(['--strict-mcp-config', 'stray'])
   assert.deepEqual(result.args, [])
@@ -109,23 +116,23 @@ test('--strict-mcp-config takes no value, so a following token is not swallowed'
 })
 
 test('an allowed variadic flag takes every following value', () => {
-  const result = filterExtraArgs(['--add-dir', '/a', '/b', '--safe-mode'])
-  assert.deepEqual(result.args, ['--add-dir', '/a', '/b', '--safe-mode'])
+  const result = filterExtraArgs(['--add-dir', '/a', '/b', '--disable-slash-commands'])
+  assert.deepEqual(result.args, ['--add-dir', '/a', '/b', '--disable-slash-commands'])
   assert.deepEqual(result.rejected, [])
 })
 
 test('an allowed value flag without a value is refused, not passed bare', () => {
-  const result = filterExtraArgs(['--add-dir', '--safe-mode'])
-  assert.deepEqual(result.args, ['--safe-mode'])
+  const result = filterExtraArgs(['--add-dir', '--disable-slash-commands'])
+  assert.deepEqual(result.args, ['--disable-slash-commands'])
   assert.equal(result.rejected.length, 1)
   assert.equal(result.rejected[0].arg, '--add-dir')
   assert.match(result.rejected[0].reason, /expects a value/)
 })
 
 test('an allowed boolean given a value is refused rather than reinterpreted', () => {
-  const result = filterExtraArgs(['--safe-mode=false'])
+  const result = filterExtraArgs(['--disable-slash-commands=false'])
   assert.deepEqual(result.args, [])
-  assert.equal(result.rejected[0].arg, '--safe-mode=false')
+  assert.equal(result.rejected[0].arg, '--disable-slash-commands=false')
   assert.match(result.rejected[0].reason, /takes no value/)
 })
 
@@ -137,8 +144,8 @@ test('short and clustered short flags are always refused', () => {
 })
 
 test('the -- separator and everything after it is refused', () => {
-  const result = filterExtraArgs(['--safe-mode', '--', '--add-dir', '/a', 'prompt text'])
-  assert.deepEqual(result.args, ['--safe-mode'])
+  const result = filterExtraArgs(['--disable-slash-commands', '--', '--add-dir', '/a', 'prompt text'])
+  assert.deepEqual(result.args, ['--disable-slash-commands'])
   assert.deepEqual(result.rejected.map((entry) => entry.arg), ['--', '--add-dir', '/a', 'prompt text'])
   for (const entry of result.rejected) assert.match(entry.reason, /positional/)
 })
