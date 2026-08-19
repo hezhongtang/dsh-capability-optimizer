@@ -8,7 +8,7 @@
 **[DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh) 的外部专家咨询：agent 通过明确的 advisor / reviewer / designer / 自定义角色合同，无头调用 Claude Code CLI，并把结构化回复作为参考答案权衡。**
 
 <p align="center">
-  <img src="assets/screenshot-zh.png" width="640" alt="专家咨询设置工作区：每个 harness CLI 一个标签（Claude Code 已可用，六个已预留），含模型 / 推理等级 / 回退的通用默认、角色列表与真实连通性测试。" />
+  <img src="assets/screenshot-zh.png" width="640" alt="专家咨询设置工作区：每个 harness CLI 一个标签（Claude Code 已可用，六个已预留），通用默认（模型 / 推理等级 / 回退 / 各类上限）、角色列、自动咨询预设面板与真实连通性测试。" />
 </p>
 
 [English](README.md) | 中文

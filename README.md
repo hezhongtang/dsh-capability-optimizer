@@ -8,7 +8,7 @@
 **External-expert consultation for [DeepSeek Harness](https://www.npmjs.com/package/@deepseek-ai/dsh): the agent headlessly invokes the Claude Code CLI through explicit advisor, reviewer, designer, or custom role contracts, then weighs the structured replies as reference answers.**
 
 <p align="center">
-  <img src="assets/screenshot-zh.png" width="640" alt="The Expert Consult settings workspace: one tab per harness CLI (Claude Code live, six reserved), general defaults with model / thinking-effort / fallback, the role roster, and a live connectivity test." />
+  <img src="assets/screenshot-zh.png" width="640" alt="The Expert Consult settings workspace: one tab per harness CLI (Claude Code live, six reserved), general defaults with model / thinking-effort / fallback / caps, the role roster, the auto-consult preset panel, and a live connectivity test." />
 </p>
 
 English | [中文](README.zh-cn.md)
