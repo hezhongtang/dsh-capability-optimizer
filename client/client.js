@@ -5,7 +5,7 @@ var module = { exports: {} }; var exports = module.exports;
 /**
  * dsh-capability-optimizer client.
  *
- * Two seats:
+ * Three seats:
  *  - a Settings section ("Expert Consult") managing the consultation
  *    settings — CLI path, default + fallback models (omp-style one-hop model
  *    fallback), timeouts, the role roster workspace (add / edit / toggle /
@@ -13,7 +13,10 @@ var module = { exports: {} }; var exports = module.exports;
  *    and the auto-consult defaults (checked set + per-role session cap);
  *  - a composer-seat toggle in the conversation input toolbar: check roles
  *    per session and the host injects their selection policy and lifecycle
- *    nudges (see lib/autoconsult.js), with live usage counts.
+ *    nudges (see lib/autoconsult.js), with live usage counts;
+ *  - a consultation status dock above the composer: one card per physical
+ *    consultation with queued/running/fallback/terminal phases and a bounded
+ *    preview of the final Claude reply or failure.
  *
  * Saves hot-apply on the host: the agent tools re-register immediately, no
  * dsh restart. Includes an end-to-end test call that really consults Claude
@@ -142,6 +145,21 @@ const zh = {
   acFailed: '失败',
   acCancelled: '已取消',
   acNotJson: '自动咨询接口未返回 JSON。更新插件后请重启 dsh web。',
+  cdTitle: '咨询状态',
+  cdClear: '清除已结束',
+  cdClose: '关闭',
+  cdPhaseQueued: '排队中',
+  cdPhaseRunning: '运行中',
+  cdPhaseFallback: '回退重试',
+  cdPhaseSucceeded: '成功',
+  cdPhaseFailed: '失败',
+  cdPhaseAborted: '已取消',
+  cdWaiting: '等待 Claude 回复…',
+  cdFallbackBadge: '已触发模型回退',
+  cdTruncated: '已截断',
+  cdStale: '状态可能已过期',
+  cdBytes: '已收到 {bytes} 字节',
+  cdEmpty: '暂无咨询',
   tabPlanned: '规划中',
   reservedTitle: '工作区已预留',
   reservedBody: '该 harness 的运行器就绪后，其配置将在此展开；角色体系与咨询工具保持共用。',
@@ -268,6 +286,21 @@ const en = {
   acFailed: 'failed',
   acCancelled: 'cancelled',
   acNotJson: 'Auto-consult API did not return JSON. Restart dsh web after updating the plugin.',
+  cdTitle: 'Consultation status',
+  cdClear: 'Clear completed',
+  cdClose: 'Close',
+  cdPhaseQueued: 'Queued',
+  cdPhaseRunning: 'Running',
+  cdPhaseFallback: 'Fallback retry',
+  cdPhaseSucceeded: 'Succeeded',
+  cdPhaseFailed: 'Failed',
+  cdPhaseAborted: 'Cancelled',
+  cdWaiting: 'Waiting for Claude…',
+  cdFallbackBadge: 'model fallback used',
+  cdTruncated: 'truncated',
+  cdStale: 'Status may be stale',
+  cdBytes: '{bytes} bytes received',
+  cdEmpty: 'No consultations yet',
   tabPlanned: 'planned',
   reservedTitle: 'Workspace reserved',
   reservedBody: 'Once this harness\'s runner lands, its configuration unfolds here; the role roster and consultation tools stay shared.',
@@ -431,6 +464,36 @@ const CSS = [
   '.dco-check{display:flex;align-items:center;gap:8px;padding:5px 6px;border-radius:7px;cursor:pointer;font-size:12px}',
   '.dco-check:hover{background:rgba(127,127,127,.1)}',
   '.dco-check input{accent-color:var(--dsw-alias-brand-primary,#508cff);margin:0;flex:none}',
+  // Live consultation dock: sits in conversation.input.dock directly above the
+  // composer. It consumes no space when idle (the component renders null), and
+  // is height-capped when a burst of panel roles finishes at once.
+  '.dco-cd{box-sizing:border-box;display:flex;flex-direction:column;gap:6px;padding:8px 10px;border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.4));border-radius:12px;background:var(--dsw-alias-bg-layer-2,#fff);color:var(--dsw-alias-label-primary,inherit);margin:0 0 6px}',
+  '.dco-cd-head{display:flex;align-items:center;gap:8px;font-size:11px}',
+  '.dco-cd-title{font-weight:600}',
+  '.dco-cd-head .dco-ac-link{margin-left:auto}',
+  '.dco-cd-stale{opacity:.6;font-size:10px}',
+  '.dco-cd-list{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto}',
+  '.dco-cd-card{border:1px solid var(--dsw-alias-border-l1,rgba(127,127,127,.25));border-radius:9px;padding:6px 8px;display:flex;flex-direction:column;gap:3px;font-size:11px}',
+  '.dco-cd-row{display:flex;align-items:center;gap:6px}',
+  '.dco-cd-role{font-family:var(--ds-font-family-code);font-weight:600}',
+  '.dco-cd-phase{font-size:10px;font-weight:600;padding:0 6px;border-radius:99px;line-height:16px;flex:none}',
+  '.dco-cd-phase.queued{background:rgba(127,127,127,.16);color:var(--dsw-alias-label-secondary,inherit)}',
+  '.dco-cd-phase.running,.dco-cd-phase.fallback{background:var(--dsw-alias-state-business-tertiary,rgba(80,140,255,.16));color:var(--dsw-alias-brand-primary,#508cff)}',
+  '.dco-cd-phase.succeeded{background:var(--dsw-alias-state-success-tertiary,rgba(46,160,67,.14));color:var(--dsw-alias-state-success-primary,#2ea44f)}',
+  '.dco-cd-phase.failed{background:var(--dsw-alias-state-error-tertiary,rgba(210,80,80,.14));color:var(--dsw-alias-state-error-primary,#d25050)}',
+  '.dco-cd-phase.aborted{background:rgba(127,127,127,.16);color:var(--dsw-alias-label-secondary,inherit)}',
+  '.dco-cd-time{margin-left:auto;opacity:.6;font-variant-numeric:tabular-nums;flex:none}',
+  '.dco-cd-x{border:none;background:transparent;color:inherit;opacity:.6;cursor:pointer;font-size:13px;line-height:1;padding:0 2px}',
+  '.dco-cd-x:hover{opacity:1}',
+  '.dco-cd-question{opacity:.7;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}',
+  '.dco-cd-sub{display:flex;align-items:center;gap:6px;opacity:.7}',
+  '.dco-cd-fallback{font-size:9.5px;padding:0 5px;border-radius:99px;background:var(--dsw-alias-state-business-tertiary,rgba(80,140,255,.14))}',
+  '.dco-cd-wait{opacity:.75}',
+  '.dco-cd-answer,.dco-cd-error{white-space:pre-wrap;overflow-wrap:anywhere;background:var(--dsw-alias-bg-layer-3,rgba(127,127,127,.1));border-radius:7px;padding:5px 7px;max-height:120px;overflow:auto}',
+  '.dco-cd-error{color:var(--dsw-alias-state-error-primary,#d25050)}',
+  '.dco-cd-error code{font-family:var(--ds-font-family-code);font-weight:600}',
+  '.dco-cd-trunc{opacity:.6}',
+  '.dco-cd-envelope{opacity:.6;font-size:10px}',
 ].join('\n')
 
 let stylesMounted = false
@@ -466,19 +529,34 @@ function isAutoConsultState(data) {
     && Array.isArray(data.roles)
 }
 
+/** `/consultation-status` shape: one session's newest-first dock entries. */
+function isConsultationStatus(data) {
+  return data !== null && typeof data === 'object' && !Array.isArray(data)
+    && typeof data.session === 'string'
+    && Array.isArray(data.entries)
+    && typeof data.now === 'number' && Number.isFinite(data.now)
+}
+
 async function api(path, options) {
   const res = await fetch(path, { cache: 'no-store', ...options })
   const raw = await res.text()
+  /** Attach the HTTP status to every thrown error so callers can key on it. */
+  const fail = (message) => {
+    const error = new Error(message)
+    error.status = res.status
+    throw error
+  }
   let data
   try {
     data = readApiJson(res, raw)
   } catch (error) {
-    if (!res.ok) throw new Error(`HTTP ${res.status}`)
+    if (!res.ok) fail(`HTTP ${res.status}`)
+    error.status = res.status
     throw error
   }
   if (!res.ok) {
     const detail = Array.isArray(data.problems) ? data.problems.join('; ') : (data.error ?? `HTTP ${res.status}`)
-    throw new Error(detail)
+    fail(detail)
   }
   return data
 }
@@ -878,6 +956,230 @@ function AutoConsultControl({ sessionId, t }) {
               : null)))))
 }
 
+const DOCK_TERMINAL_PHASES = ['succeeded', 'failed', 'aborted']
+const DOCK_PREVIEW_CHARS = 140
+
+function dockPhaseLabel(t, phase) {
+  if (typeof phase !== 'string' || phase.length === 0) return String(phase ?? '')
+  const key = `cdPhase${phase.charAt(0).toUpperCase()}${phase.slice(1)}`
+  const label = t(key)
+  return label === key ? phase : label
+}
+
+function dockDurationMs(entry, now) {
+  if (typeof entry?.durationMs === 'number' && Number.isFinite(entry.durationMs)) return entry.durationMs
+  const started = Number(entry?.startedAt)
+  if (!Number.isFinite(started) || !Number.isFinite(now)) return 0
+  return Math.max(0, now - started)
+}
+
+function dockClock(ms) {
+  const total = Math.max(0, Math.floor(ms / 1000))
+  const minutes = Math.floor(total / 60)
+  const seconds = total % 60
+  return `${minutes}:${String(seconds).padStart(2, '0')}`
+}
+
+/**
+ * Poll cadence: 1s while anything is non-terminal, 8s for settled history or
+ * an empty session. Empty and settled share the same floor so an idle
+ * conversation does not poll forever at 2s.
+ */
+function dockPollDelay(entries) {
+  const list = Array.isArray(entries) ? entries : []
+  if (list.some((entry) => !DOCK_TERMINAL_PHASES.includes(entry?.phase))) return 1000
+  return 8000
+}
+
+/**
+ * Display clock derived from one captured client timestamp, never from a
+ * monotonic tick: `snapshot.now` refreshes on every poll, so adding `tick`
+ * would double-count elapsed time.
+ */
+function dockNow(snapshot, clientNow) {
+  if (snapshot === null || typeof snapshot !== 'object') return clientNow
+  const serverNow = Number(snapshot.now)
+  const receivedAt = Number(snapshot.receivedAt)
+  const client = Number(clientNow)
+  if (!Number.isFinite(serverNow) || !Number.isFinite(receivedAt)) return serverNow
+  if (!Number.isFinite(client)) return serverNow
+  return serverNow + Math.max(0, client - receivedAt)
+}
+
+function DockCard({ entry, t, now, onDismiss }) {
+  const [open, setOpen] = useState(false)
+  if (entry === null || typeof entry !== 'object') return null
+  const terminal = DOCK_TERMINAL_PHASES.includes(entry.phase)
+  const modelLine = [
+    typeof entry.model?.requested === 'string' && entry.model.requested.length > 0 ? entry.model.requested : null,
+    typeof entry.model?.effective === 'string' && entry.model.effective.length > 0 && entry.model.effective !== entry.model?.requested
+      ? entry.model.effective
+      : null,
+    typeof entry.effort === 'string' && entry.effort.length > 0 ? entry.effort : null,
+  ].filter(Boolean).join(' · ')
+  const answer = typeof entry.answer === 'string' && entry.answer.length > 0 ? entry.answer : null
+  const error = typeof entry.error === 'string' && entry.error.length > 0 ? entry.error : null
+
+  let body = null
+  if (terminal && entry.phase === 'succeeded' && answer !== null) {
+    body = h('div', { className: 'dco-cd-answer' },
+      open ? answer : answer.slice(0, DOCK_PREVIEW_CHARS),
+      entry.answerTruncated === true ? h('span', { className: 'dco-cd-trunc' }, ` · ${t('cdTruncated')}`) : null,
+      answer.length > DOCK_PREVIEW_CHARS
+        ? h('button', { className: 'dco-ac-link', type: 'button', onClick: () => { setOpen(!open) } }, open ? '−' : '+')
+        : null)
+  } else if (terminal && error !== null) {
+    body = h('div', { className: 'dco-cd-error' },
+      entry.failure ? h('code', null, entry.failure) : null,
+      ' ',
+      open ? error : error.slice(0, DOCK_PREVIEW_CHARS),
+      entry.errorTruncated === true ? h('span', { className: 'dco-cd-trunc' }, ` · ${t('cdTruncated')}`) : null,
+      error.length > DOCK_PREVIEW_CHARS
+        ? h('button', { className: 'dco-ac-link', type: 'button', onClick: () => { setOpen(!open) } }, open ? '−' : '+')
+        : null)
+  } else {
+    body = h('div', { className: 'dco-cd-wait' },
+      t('cdWaiting'),
+      typeof entry.meta?.outputBytes === 'number' && Number.isFinite(entry.meta.outputBytes)
+        ? h('span', null, ` · ${t('cdBytes').replace('{bytes}', String(entry.meta.outputBytes))}`)
+        : null)
+  }
+
+  return h('div', { className: `dco-cd-card ${entry.phase}` },
+    h('div', { className: 'dco-cd-row' },
+      h('span', { className: 'dco-cd-role' }, entry.role),
+      h('span', { className: `dco-cd-phase ${entry.phase}` }, dockPhaseLabel(t, entry.phase)),
+      h('span', { className: 'dco-cd-time' }, dockClock(dockDurationMs(entry, now))),
+      terminal
+        ? h('button', {
+            className: 'dco-cd-x', type: 'button', 'aria-label': t('cdClose'),
+            onClick: onDismiss,
+          }, '×')
+        : null),
+    typeof entry.question === 'string' && entry.question.length > 0
+      ? h('div', { className: 'dco-cd-question', title: entry.question }, entry.question)
+      : null,
+    modelLine.length > 0 || entry.model?.usedFallback === true
+      ? h('div', { className: 'dco-cd-sub' },
+          modelLine.length > 0 ? h('span', null, modelLine) : null,
+          entry.model?.usedFallback === true ? h('span', { className: 'dco-cd-fallback' }, t('cdFallbackBadge')) : null)
+      : null,
+    body,
+    terminal && entry.phase === 'succeeded' && typeof entry.envelopeStatus === 'string'
+      ? h('div', { className: 'dco-cd-envelope' }, `envelope: ${entry.envelopeStatus}`)
+      : null)
+}
+
+/**
+ * Live consultation dock above the composer. Polls the session-scoped status
+ * endpoint, paints one card per physical consultation, and keeps terminal
+ * cards until the user dismisses them. The dock is an enhancement: before
+ * first data it renders nothing, and a missing route on an older host simply
+ * stops the poll for this mount.
+ */
+function ConsultationDock({ sessionId, t }) {
+  const [snapshot, setSnapshot] = useState(null) // { entries, now, receivedAt, stale? }
+  const [hidden, setHidden] = useState([])
+  const [clientNow, setClientNow] = useState(() => Date.now())
+
+  useEffect(() => {
+    setSnapshot(null)
+    setHidden([])
+    setClientNow(Date.now())
+  }, [sessionId])
+
+  useEffect(() => {
+    if (typeof sessionId !== 'string' || sessionId.length === 0) return undefined
+    let stopped = false
+    let dead = false
+    let delay = 8000
+    let failures = 0
+    let timer = null
+    const schedule = (ms) => {
+      if (stopped || dead) return
+      timer = setTimeout(run, ms)
+    }
+    const hidden = () => typeof document !== 'undefined' && document.hidden === true
+    const run = async () => {
+      if (stopped || dead) return
+      // A hidden tab neither needs a 1s poll nor should keep the host busy;
+      // re-check cheaply until it becomes visible again.
+      if (hidden()) {
+        timer = setTimeout(run, 1000)
+        return
+      }
+      try {
+        const data = await api(`/dsh-capability-optimizer/consultation-status?session=${encodeURIComponent(sessionId)}`)
+        if (stopped) return
+        if (!isConsultationStatus(data)) throw new Error('status-not-json')
+        const entries = Array.isArray(data.entries) ? data.entries : []
+        setSnapshot({ entries, now: data.now, receivedAt: Date.now(), stale: false })
+        setClientNow(Date.now())
+        setHidden((prev) => {
+          const live = new Set(entries.map((entry) => entry.id))
+          return prev.filter((id) => live.has(id))
+        })
+        failures = 0
+        delay = dockPollDelay(entries)
+        schedule(delay)
+      } catch (error) {
+        if (stopped) return
+        failures += 1
+        setSnapshot((prev) => (prev === null ? null : { ...prev, stale: true }))
+        if (typeof error?.status === 'number' && error.status === 404) { dead = true; return } // host predates the route
+        if (failures >= 5) { dead = true; return } // stop hammering a broken endpoint until remount
+        delay = Math.min(8000, delay * 2)
+        schedule(delay)
+      }
+    }
+    const onVisible = () => {
+      if (stopped || dead || hidden()) return
+      if (timer !== null) clearTimeout(timer)
+      run()
+    }
+    if (typeof document !== 'undefined') document.addEventListener('visibilitychange', onVisible)
+    schedule(delay)
+    return () => {
+      stopped = true
+      if (timer !== null) clearTimeout(timer)
+      if (typeof document !== 'undefined') document.removeEventListener('visibilitychange', onVisible)
+    }
+  }, [sessionId])
+
+  const entries = Array.isArray(snapshot?.entries) ? snapshot.entries : []
+  const visible = entries.filter((entry) => !hidden.includes(entry.id))
+  const activeVisible = visible.some((entry) => !DOCK_TERMINAL_PHASES.includes(entry.phase))
+  const terminalVisible = visible.filter((entry) => DOCK_TERMINAL_PHASES.includes(entry.phase))
+
+  useEffect(() => {
+    if (!activeVisible) return undefined
+    const timer = setInterval(() => { setClientNow(Date.now()) }, 1000)
+    return () => { clearInterval(timer) }
+  }, [activeVisible])
+
+  if (typeof sessionId !== 'string' || sessionId.length === 0 || snapshot === null || visible.length === 0) return null
+  const now = dockNow(snapshot, clientNow)
+  const clearCompleted = () => {
+    setHidden((prev) => [...new Set([...prev, ...terminalVisible.map((entry) => entry.id)])])
+  }
+
+  return h('div', { className: 'dco-cd', 'aria-live': 'polite' },
+    h('div', { className: 'dco-cd-head' },
+      h('span', { className: 'dco-cd-title' }, t('cdTitle')),
+      snapshot.stale === true ? h('span', { className: 'dco-cd-stale' }, t('cdStale')) : null,
+      terminalVisible.length > 0
+        ? h('button', { className: 'dco-ac-link', type: 'button', onClick: clearCompleted }, t('cdClear'))
+        : null),
+    h('div', { className: 'dco-cd-list' },
+      visible.map((entry) => h(DockCard, {
+        key: entry.id,
+        entry,
+        t,
+        now,
+        onDismiss: () => { setHidden((prev) => [...new Set([...prev, entry.id])]) },
+      }))))
+}
+
 function ReservedWorkspace({ t, backend }) {
   const noteKey = BACKEND_NOTE_KEYS[backend.id]
   const note = (noteKey ? t(noteKey) : '') || backend.note || t('reservedBody')
@@ -1057,7 +1359,7 @@ function Section({ t }) {
         h(EffortField, { label: t('effort'), value: draft.effort ?? '', t, onChange: field('effort') }),
         h(ModelField, { label: t('fallbackModel'), value: draft.fallbackModel ?? '', t, models: loaded.models, onChange: field('fallbackModel') }),
         h(NumberField, { label: t('timeoutMs'), value: draft.timeoutMs, max: 3600000, onChange: num('timeoutMs', 300000, 3600000) }),
-        h(NumberField, { label: t('maxTurns'), value: draft.maxTurns, max: 200, onChange: num('maxTurns', 8, 200) }),
+        h(NumberField, { label: t('maxTurns'), value: draft.maxTurns, max: 200, onChange: num('maxTurns', 16, 200) }),
         h(NumberField, { label: t('maxPanelRoles'), value: draft.maxPanelRoles, max: 32, onChange: num('maxPanelRoles', 4, 32) }),
         h(NumberField, {
           label: t('maxBudgetUsd'), value: draft.maxBudgetUsd ?? 0, min: 0, max: 100000, step: '0.01',
@@ -1165,6 +1467,9 @@ exports.name = 'dsh-capability-optimizer'
 // composition) already hard-depends on them.
 exports.inject = ['slots', 'locale']
 exports.isAutoConsultState = isAutoConsultState
+exports.isConsultationStatus = isConsultationStatus
+exports.dockPollDelay = dockPollDelay
+exports.dockNow = dockNow
 exports.readApiJson = readApiJson
 
 exports.apply = function apply(ctx) {
@@ -1191,6 +1496,16 @@ exports.apply = function apply(ctx) {
     order: 30,
     locale: NS,
   }, AutoConsultControl))
+
+  // Live consultation status dock above the composer. The host renders this
+  // slot before the input bar; the component returns null until a status
+  // entry exists, so an idle conversation keeps its full composer height.
+  ctx.slots.inject('conversation.input.dock', () => ctx.slots.register({
+    name: 'conversation.input.dock',
+    id: 'capability-optimizer',
+    order: 30,
+    locale: NS,
+  }, ConsultationDock))
 }
 
 return module.exports

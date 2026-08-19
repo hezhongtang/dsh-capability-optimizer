@@ -82,7 +82,7 @@ function applyClient() {
   return { client, registered, dictionaries, styles }
 }
 
-test('the client bundle loads and registers both seats', () => {
+test('the client bundle loads and registers all three seats', () => {
   const { client, registered } = applyClient()
 
   assert.equal(client.name, 'dsh-capability-optimizer')
@@ -90,7 +90,7 @@ test('the client bundle loads and registers both seats', () => {
   // compare against a host-realm literal would fail on the prototype alone.
   assert.deepEqual([...client.inject], ['slots', 'locale'])
   assert.deepEqual(registered.map((entry) => entry.name).sort(),
-    ['conversation.input.left', 'settings.section'])
+    ['conversation.input.dock', 'conversation.input.left', 'settings.section'])
 })
 
 test('the zh and en dictionaries define exactly the same keys', () => {
@@ -184,6 +184,32 @@ test('an HTML 200 SPA shell is not a valid auto-consult snapshot', () => {
   }), true)
 })
 
+test('consultation-status snapshots have a strict JSON guard too', () => {
+  const { client } = applyClient()
+  assert.equal(typeof client.isConsultationStatus, 'function')
+  assert.equal(client.isConsultationStatus({}), false)
+  assert.equal(client.isConsultationStatus(null), false)
+  assert.equal(client.isConsultationStatus({ session: 's', entries: [] }), false)
+  assert.equal(client.isConsultationStatus({ session: 's', entries: [], now: Date.now() }), true)
+  assert.equal(client.isConsultationStatus({ session: 's', entries: [], now: 'later' }), false)
+})
+
+test('dock timing helpers do not drift and poll only as fast as needed', () => {
+  const { client } = applyClient()
+  assert.equal(typeof client.dockPollDelay, 'function')
+  assert.equal(typeof client.dockNow, 'function')
+
+  assert.equal(client.dockPollDelay([]), 8000)
+  assert.equal(client.dockPollDelay([{ phase: 'succeeded' }]), 8000)
+  assert.equal(client.dockPollDelay([{ phase: 'running' }]), 1000)
+  assert.equal(client.dockPollDelay([{ phase: 'fallback' }]), 1000)
+
+  const snapshot = { now: 100000, receivedAt: 100000 }
+  assert.equal(client.dockNow(snapshot, 110000), 110000)
+  assert.equal(client.dockNow(snapshot, 200000), 200000, 'a monotonic tick must never be added to refreshed server time')
+  assert.equal(client.dockNow({ now: 100000 }, 120000), 100000, 'missing receivedAt falls back to the server clock')
+})
+
 test('readApiJson rejects the SPA HTML shell even when status is 200', () => {
   const { client } = applyClient()
   const html = {
@@ -199,6 +225,13 @@ test('readApiJson rejects the SPA HTML shell even when status is 200', () => {
   }
   // vm-realm objects fail a host-realm deepEqual on the prototype alone.
   assert.equal(JSON.stringify(client.readApiJson(json, '{"session":{"enabled":[]}}')), '{"session":{"enabled":[]}}')
+})
+
+test('api errors carry their HTTP status so the dock can key on a real 404', () => {
+  const source = readFileSync(join(repoRoot, 'client', 'client.js'), 'utf8')
+  assert.match(source, /error\.status = res\.status/)
+  assert.match(source, /error\.status === 404/)
+  assert.match(source, /failures >= 5/)
 })
 
 test('apply() injects composer styles so the chat seat is not unstyled', () => {
@@ -235,6 +268,15 @@ test('composer auto-consult button matches the host toolbar trigger tokens', () 
   const onAt = css.indexOf('.dco-ac-btn.on')
   assert.ok(hoverAt !== -1 && onAt !== -1 && onAt > hoverAt, 'selected state must outrank the plain hover background')
   assert.match(css, /\.dco-ac-btn\.on:hover\{filter:brightness/)
+})
+
+test('consultation dock styles ship in the same injected stylesheet', () => {
+  const { styles } = applyClient()
+  const css = styles.find((el) => el.attributes['data-dco'] === '')?.textContent ?? ''
+  assert.match(css, /\.dco-cd\{box-sizing:border-box;display:flex/)
+  assert.match(css, /\.dco-cd-list\{display:flex;flex-direction:column;gap:6px;max-height:180px;overflow:auto\}/)
+  assert.match(css, /\.dco-cd-phase\.succeeded\{[^}]*--dsw-alias-state-success/)
+  assert.match(css, /\.dco-cd-phase\.failed\{[^}]*--dsw-alias-state-error/)
 })
 
 test('composer clamp and ARIA derive from one shared popup constant', () => {

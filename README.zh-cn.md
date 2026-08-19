@@ -73,6 +73,12 @@ agent 选择角色并调用 `consult_expert`。精确任务可传结构化 `brie
 - **软约束（有意为之）**：催办保证指令送达，不保证工具调用——dsh 没有强制调用 API；模型若拒绝须一行说明理由。
 - 浮层实时显示各角色的用量（`已用/上限`）；上次的选择按浏览器记忆。**设置 → 专家咨询 → 自动咨询** 编辑默认勾选集与预算（行配置键 `autoConsult`）——tui/headless 直接消费同一层。
 
+## 咨询状态卡片
+
+聊天输入框上方有一个会话级的动态卡片栏，显示本会话每次真实咨询的实时状态：`排队中 / 运行中 / 回退重试 / 成功 / 失败 / 已取消`。运行中的卡片显示模型、effort 与已捕获的 stdout 字节数；结束后显示失败分类，或回复 / envelope 摘要。`consult_panel` 每个角色一张卡，部分失败按角色可见。
+
+卡片栏在无咨询时完全不占空间，终端卡片可单张关闭或一键清除；会话关闭即清空。数据只保留在插件内存（每会话保留最近 8 条终态卡，活跃卡另有硬上限 24 条；不含 `context` / `brief` / artifacts），回复与错误均为服务端截断预览。这是轮询状态 + 最终回复预览，不是 token 级流式；旧宿主没有 `conversation.input.dock` 插槽或状态路由时自动不显示/停止轮询。
+
 ## 设置界面
 
 **设置 → 专家咨询** 按 harness CLI 组织为独立工作区——顶部标签栏来自 harness 目录（`claude-code` 可用；`codex`、`zcode`、`kimi-code`、`pi`、`opencode`、`omp` 均已预留工作区，运行器就绪前不存任何设置）。Claude Code 工作区运行时管理一切：
@@ -94,7 +100,7 @@ agent 选择角色并调用 `consult_expert`。精确任务可传结构化 `brie
 | `cliPath` | `claude` | CLI 不在 PATH 上时的路径。 |
 | `model` | CLI 默认 | 调用未指定时的模型别名（`opus`、`sonnet` 等）。 |
 | `timeoutMs` | `300000` | 单次咨询墙钟上限。 |
-| `maxTurns` | `8` | CLI 内部代理轮数上限。 |
+| `maxTurns` | `16` | CLI 内部代理轮数上限。 |
 | `maxPanelRoles` | `4` | `consult_panel` 单次角色数上限。 |
 | `maxBudgetUsd` | `0` | 单次咨询美元上限（CLI 支持时传 `--max-budget-usd`）。`0` 表示不设上限。 |
 | `extraArgs` | `[]` | 附加 CLI 参数，走允许清单。会扩大权限、破坏 JSON 协议或与类型化设置重复的标志会被丢弃并回报。 |
