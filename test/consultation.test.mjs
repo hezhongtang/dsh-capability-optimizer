@@ -103,6 +103,30 @@ function deferred() {
 
 const ask = (extra = {}) => ({ role: 'advisor', question: 'is this sound?', ...extra })
 
+/** Recording status store implementing the service's `{ begin }` seam. */
+function createFakeStatus() {
+  const began = []
+  return {
+    began,
+    begin(input) {
+      const updates = []
+      let final = null
+      const handle = {
+        updates,
+        get final() { return final },
+        update(patch) { if (final === null) updates.push({ update: patch }) },
+        finish(phase, fields = {}) {
+          if (final !== null) return
+          final = { phase, fields }
+          updates.push({ finish: final })
+        },
+      }
+      began.push({ input, handle })
+      return handle
+    },
+  }
+}
+
 /* ------------------------------------------------- model / effort resolution */
 
 test('model resolution: call override beats role beats global', async () => {
@@ -290,6 +314,116 @@ test('a thrown exception still settles the attempt and frees the slot', async ()
   await assert.rejects(service.consult(ask({ sessionId: 's1' })), /workspace unavailable/)
   assert.deepEqual(ledger.settles, [{ sessionId: 's1', role: 'advisor', outcome: 'failed' }])
   assert.deepEqual(gate.stats(), { inFlight: 0, waiting: 0, maxConcurrent: 1, maxPerSession: 1 })
+})
+
+test('the dock status follows queued -> running -> succeeded with final fields', async () => {
+  const status = createFakeStatus()
+  const settings = withRole(makeSettings({ effort: 'low' }), 'advisor', { model: 'sonnet' })
+  const runner = makeRunner(() => okResult('PONG'))
+  const result = await createConsultationService({ settings, runner, status })
+    .consult(ask({ sessionId: 's1' }))
+
+  assert.equal(result.ok, true)
+  assert.equal(status.began.length, 1)
+  assert.deepEqual(status.began[0].input, { sessionId: 's1', source: 'tool', role: 'advisor', question: 'is this sound?' })
+  const handle = status.began[0].handle
+  assert.deepEqual(handle.updates.map((step) => step.update?.phase ?? step.finish?.phase).filter(Boolean), ['running', 'succeeded'])
+  assert.equal(handle.final.phase, 'succeeded')
+  assert.equal(handle.final.fields.answer, 'PONG')
+  assert.equal(handle.final.fields.model.effective, 'sonnet')
+  assert.equal(handle.final.fields.effort, 'low')
+})
+
+test('a model-level failure marks the same card fallback then failed', async () => {
+  const status = createFakeStatus()
+  const settings = withRole(makeSettings({ fallbackModel: 'sonnet' }), 'advisor', { model: 'opus' })
+  const runner = makeRunner(async (_options, index) => {
+    if (index === 0) return failResult('unrecognized_model: opus', 'cli-error')
+    return okResult('fallback answer')
+  })
+  const result = await createConsultationService({ settings, runner, status })
+    .consult(ask({ sessionId: 's1' }))
+
+  assert.equal(result.ok, true)
+  assert.equal(result.meta.usedFallback, true)
+  const handle = status.began[0].handle
+  assert.deepEqual(handle.updates.map((step) => step.update?.phase ?? step.finish?.phase).filter(Boolean), ['running', 'fallback', 'succeeded'])
+  assert.equal(handle.final.fields.model.usedFallback, true)
+})
+
+test('budget refusal closes the dock card as failed/budget without a runner call', async () => {
+  const status = createFakeStatus()
+  const ledger = createFakeLedger({ cap: 1 })
+  const runner = makeRunner(() => okResult())
+  const service = createConsultationService({ settings: makeSettings(), ledger, runner, status })
+
+  await service.consult(ask({ sessionId: 's1' }))
+  const refused = await service.consult(ask({ sessionId: 's1' }))
+
+  assert.equal(refused.failure, 'budget')
+  assert.equal(runner.calls.length, 1)
+  assert.equal(status.began.length, 2, 'the refused attempt is still a visible consultation card')
+  const handle = status.began[1].handle
+  assert.equal(handle.final.phase, 'failed')
+  assert.equal(handle.final.fields.failure, 'budget')
+})
+
+test('a queued-wait abort closes the card as aborted/concurrency', async () => {
+  const status = createFakeStatus()
+  const gate = createConsultationGate({ maxConcurrent: 1, maxPerSession: 1 })
+  const hold = deferred()
+  const runner = makeRunner(async () => {
+    await hold.promise
+    return okResult()
+  })
+  const service = createConsultationService({ settings: makeSettings(), gate, runner, status })
+  const controller = new AbortController()
+
+  const holding = service.consult(ask({ sessionId: 's1', question: 'hold the slot' }))
+  await new Promise((resolve) => setImmediate(resolve))
+  const queued = service.consult(ask({ sessionId: 's1', question: 'queued question', signal: controller.signal }))
+  await new Promise((resolve) => setImmediate(resolve))
+  controller.abort()
+  const cancelled = await queued
+  assert.equal(cancelled.failure, 'concurrency')
+  const handle = status.began[1].handle
+  assert.equal(handle.final.phase, 'aborted')
+  assert.equal(handle.final.fields.failure, 'concurrency')
+
+  hold.resolve()
+  assert.equal((await holding).ok, true)
+})
+
+test('a thrown runner still finishes the dock card failed', async () => {
+  const status = createFakeStatus()
+  const runner = makeRunner(() => { throw new Error('boom') })
+  const result = await createConsultationService({ settings: makeSettings(), runner, status })
+    .consult(ask({ sessionId: 's1' }))
+
+  assert.equal(result.failure, INTERNAL_ERROR)
+  assert.equal(status.began[0].handle.final.phase, 'failed')
+})
+
+test('overlapping identical calls share one physical run and one dock card', async () => {
+  const status = createFakeStatus()
+  const release = deferred()
+  let calls = 0
+  const runner = makeRunner(async () => {
+    calls += 1
+    await release.promise
+    return okResult('shared')
+  })
+  const service = createConsultationService({ settings: makeSettings(), runner, status })
+
+  const one = service.consult(ask({ sessionId: 's1' }))
+  const two = service.consult(ask({ sessionId: 's1' }))
+  release.resolve()
+  const results = await Promise.all([one, two])
+
+  assert.equal(calls, 1)
+  assert.equal(results[0].answer, 'shared')
+  assert.equal(results[1].answer, 'shared')
+  assert.equal(status.began.length, 1)
 })
 
 /* -------------------------------------------------------------- concurrency */
@@ -603,6 +737,16 @@ function makeRequest(body, url = '/dsh-capability-optimizer/test') {
   }
 }
 
+/** Fake GET request with optional headers (browser GETs often omit Origin). */
+function makeGet(url, headers = {}) {
+  return {
+    method: 'GET',
+    url,
+    headers,
+    async *[Symbol.asyncIterator]() {},
+  }
+}
+
 /** Fake HTTP response capturing status and body. */
 function makeResponse() {
   const captured = { status: 0, body: '' }
@@ -615,7 +759,7 @@ function makeResponse() {
 }
 
 /** Mount the routes on a fake webServer and return their handlers by path. */
-function mountRoutes({ fileSettings = null, autoRuntime = null } = {}) {
+function mountRoutes({ fileSettings = null, autoRuntime = null, consultationStatus = undefined } = {}) {
   const handlers = new Map()
   const host = {
     logger: { info() {}, warn() {} },
@@ -631,6 +775,7 @@ function mountRoutes({ fileSettings = null, autoRuntime = null } = {}) {
     loadFileSettings: async () => fileSettings,
     apply: async () => 'applied',
     autoRuntime: autoRuntime ?? { snapshot: () => ({ session: { enabled: [] } }), setOverride() {} },
+    ...(consultationStatus !== undefined ? { consultationStatus } : {}),
   })
   return { handler: (path) => handlers.get(`/dsh-capability-optimizer/${path}`), dispose }
 }
@@ -729,6 +874,61 @@ test('/autoconsult-save survives a runtime that reports nothing', async () => {
   await handler('autoconsult-save')(makeRequest({ session: 's', enabled: [] }, '/dsh-capability-optimizer/autoconsult-save'), response)
   dispose()
   assert.deepEqual(JSON.parse(response.captured.body).dropped, [])
+})
+
+test('GET /consultation-status returns only the wired store snapshot for one session', async () => {
+  const entries = [{ id: 'card-1', sessionId: 'sess-1', phase: 'running' }]
+  const requested = []
+  const consultationStatus = {
+    snapshot(sessionId) {
+      requested.push(sessionId)
+      return entries
+    },
+  }
+  const { handler, dispose } = mountRoutes({ consultationStatus })
+  const response = makeResponse()
+  await handler('consultation-status')(makeGet('/dsh-capability-optimizer/consultation-status?session=sess-1'), response)
+  dispose()
+
+  assert.equal(response.captured.status, 200)
+  const payload = JSON.parse(response.captured.body)
+  assert.equal(payload.session, 'sess-1')
+  assert.deepEqual(payload.entries, entries)
+  assert.equal(typeof payload.now, 'number')
+  assert.deepEqual(requested, ['sess-1'])
+})
+
+test('/consultation-status rejects methods, mismatched origins and missing sessions', async () => {
+  const { handler, dispose } = mountRoutes({ consultationStatus: { snapshot: () => [] } })
+
+  const post = makeResponse()
+  await handler('consultation-status')({ method: 'POST', url: '/dsh-capability-optimizer/consultation-status', headers: {} }, post)
+  assert.equal(post.captured.status, 405)
+
+  const cross = makeResponse()
+  await handler('consultation-status')(makeGet('/dsh-capability-optimizer/consultation-status?session=s', {
+    origin: 'https://evil.example', host: '127.0.0.1:7777',
+  }), cross)
+  assert.equal(cross.captured.status, 403)
+
+  const missing = makeResponse()
+  await handler('consultation-status')(makeGet('/dsh-capability-optimizer/consultation-status'), missing)
+  assert.equal(missing.captured.status, 400)
+
+  // A browser GET without an Origin header is a same-origin request.
+  const bare = makeResponse()
+  await handler('consultation-status')(makeGet('/dsh-capability-optimizer/consultation-status?session=s'), bare)
+  assert.equal(bare.captured.status, 200)
+  dispose()
+})
+
+test('/consultation-status reports an unavailable store instead of pretending success', async () => {
+  const { handler, dispose } = mountRoutes()
+  const response = makeResponse()
+  await handler('consultation-status')(makeGet('/dsh-capability-optimizer/consultation-status?session=s'), response)
+  dispose()
+  assert.equal(response.captured.status, 503)
+  assert.match(response.captured.body, /status store unavailable/)
 })
 
 test('disposing a session cancels its queued and in-flight consultations and leaves others running', async () => {

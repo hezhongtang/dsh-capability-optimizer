@@ -460,6 +460,69 @@ test('a long-lived signal does not accumulate abort listeners', async () => {
   assert.equal(listenerCount(controller.signal, 'abort'), 0, 'every consultation must remove its abort listener')
 })
 
+test('onProgress reports structural lifecycle events and never output content', async () => {
+  freshProbe()
+  const progress = []
+  const { value } = await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'ok', FAKE_CLAUDE_ANSWER: 'the reference answer' }, () =>
+      runClaudeConsult(consultOptions({ onProgress: (event) => { progress.push(event) } }))))
+
+  assert.equal(value.ok, true)
+  const kinds = progress.map((event) => event.type)
+  assert.ok(kinds.includes('spawn'))
+  assert.ok(kinds.includes('stdout'))
+  assert.ok(kinds.includes('exit'))
+  const exit = progress.find((event) => event.type === 'exit')
+  assert.equal(exit.code, 0)
+  assert.equal(exit.signal, null)
+  const output = progress.find((event) => event.type === 'stdout')
+  assert.ok(output.totalBytes > 0)
+  assert.ok(progress.every((event) => !JSON.stringify(event).includes('the reference answer')),
+    'progress events must not leak reply content')
+})
+
+test('a throwing progress listener does not change the consultation result', async () => {
+  freshProbe()
+  const seen = []
+  const value = await withEnv({ FAKE_CLAUDE_MODE: 'ok' }, () =>
+    runClaudeConsult(consultOptions({
+      onProgress: (event) => {
+        seen.push(event.type)
+        throw new Error('listener exploded')
+      },
+    })))
+
+  assert.equal(value.ok, true)
+  assert.ok(seen.includes('spawn'))
+  assert.ok(seen.includes('exit'))
+})
+
+test('timeout and abort both surface a terminate progress event with the right reason', async () => {
+  freshProbe()
+  const timedOut = []
+  await withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'hang' }, () =>
+      runClaudeConsult(consultOptions({ timeoutMs: 250, onProgress: (event) => { timedOut.push(event) } }))))
+  assert.equal(timedOut.some((event) => event.type === 'terminate' && event.reason === 'timeout'), true)
+
+  freshProbe()
+  const controller = new AbortController()
+  const aborted = []
+  const pending = withRecord(() =>
+    withEnv({ FAKE_CLAUDE_MODE: 'hang' }, async () => {
+      const promise = runClaudeConsult(consultOptions({
+        signal: controller.signal,
+        timeoutMs: 60000,
+        onProgress: (event) => { aborted.push(event) },
+      }))
+      setTimeout(() => controller.abort(), 250)
+      return promise
+    }))
+  const { value } = await pending
+  assert.equal(value.failure, 'aborted')
+  assert.equal(aborted.some((event) => event.type === 'terminate' && event.reason === 'aborted'), true)
+})
+
 test('a non-zero exit is classified as cli-run', async () => {
   freshProbe()
   const value = await withEnv({

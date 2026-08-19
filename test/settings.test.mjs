@@ -22,6 +22,12 @@ test('maxBudgetUsd defaults to 0 (no cap) and accepts fractional dollars', () =>
   assert.equal(ok.settings.maxBudgetUsd, 2.5)
 })
 
+test('maxTurns defaults to 16 so evidence-gathering reviews are not cut off', () => {
+  assert.equal(defaultBackendSettings().maxTurns, 16)
+  const ok = validateBackendSettings({ ...defaultBackendSettings(), roles: [oneRole] })
+  assert.equal(ok.settings.maxTurns, 16)
+})
+
 test('an invalid maxBudgetUsd is a field problem, not a throw', () => {
   const bad = validateBackendSettings({ ...defaultBackendSettings(), maxBudgetUsd: -1, roles: [oneRole] })
   assert.equal(bad.ok, false)

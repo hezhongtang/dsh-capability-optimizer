@@ -73,6 +73,12 @@ The composer toolbar (the permissions control's row) carries an Expert Consult t
 - **Soft by design**: a nudge guarantees the instruction is delivered, never the tool call — dsh has no forced-call API. A model that declines must state the reason in one line.
 - The popover shows live usage counts (`used/cap`) per role; the last selection is remembered per browser. **Settings → Expert Consult → Auto consult** edits the default checked set and budget (row-config key `autoConsult`) — the same layer tui/headless profiles consume.
 
+## Consultation status dock
+
+A session-scoped card bar above the composer shows every real consultation in near real time: `queued / running / fallback retry / succeeded / failed / cancelled`. While running, a card shows model, effort, and captured stdout bytes; when finished it shows the failure kind, or a bounded preview of the reply / envelope. `consult_panel` yields one card per role, so partial failures stay visible per role.
+
+The dock takes no vertical space while idle; terminal cards can be dismissed individually or cleared together, and closing the session clears the bar. Entries live only in plugin memory (the latest 8 terminal cards per session, plus a hard active-card ceiling of 24; never `context` / `brief` / artifacts), and replies/errors are server-truncated previews. This is status polling plus a final-reply preview, not token streaming; on hosts without the `conversation.input.dock` slot or the status route it simply does not mount / stops polling.
+
 ## Settings UI
 
 **Settings → Expert Consult** is organized as one workspace per harness CLI — a tab bar over the catalog (`claude-code` live; `codex`, `zcode`, `kimi-code`, `pi`, `opencode`, `omp` reserved with a planned-status page and no settings stored until their runners land). The Claude Code workspace manages everything at runtime:
@@ -94,7 +100,7 @@ The row's config still works as the base layer (settings file wins once saved):
 | `cliPath` | `claude` | Path to the CLI when it is not on PATH. |
 | `model` | CLI default | Model alias (`opus`, `sonnet`, ...) applied when a call does not specify one. |
 | `timeoutMs` | `300000` | Wall-clock cap per consultation. |
-| `maxTurns` | `8` | Agentic turn cap inside the CLI. |
+| `maxTurns` | `16` | Agentic turn cap inside the CLI. |
 | `maxPanelRoles` | `4` | Roles per `consult_panel` call. |
 | `maxBudgetUsd` | `0` | Per-run dollar cap (`--max-budget-usd`) when the CLI supports it. `0` means no cap. |
 | `extraArgs` | `[]` | Extra CLI args, allowlisted. Flags that widen permissions, break the JSON protocol, or duplicate typed settings are dropped and reported. |
