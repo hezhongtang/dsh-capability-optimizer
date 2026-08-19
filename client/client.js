@@ -388,11 +388,31 @@ const CSS = [
   '.dsh-reserved-name{font-size:14px;font-weight:600}',
   '.dco-reserved .dco-hint{max-width:420px}',
   '.dco-ac{display:flex;align-items:center;flex:none}',
-  '.dco-ac-btn{height:28px;border-radius:999px;border:none;background:transparent;color:inherit;cursor:pointer;display:inline-flex;align-items:center;gap:6px;padding:0 11px;font:inherit;font-size:12px;font-weight:500;white-space:nowrap}',
-  '.dco-ac-btn:hover{background:rgba(127,127,127,.14)}',
-  '.dco-ac-btn.on{background:var(--dsw-alias-state-business-tertiary,rgba(80,140,255,.14))}',
-  '.dco-ac-count{min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--dsw-alias-brand-primary,#508cff);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center;flex:none}',
-  '.dco-ac-pop{position:fixed;width:264px;transform:translateY(-100%);background:var(--dsw-alias-bg-layer-2,#fff);color:var(--dsw-alias-label-primary,inherit);border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.4));border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:12px;display:flex;flex-direction:column;gap:8px;z-index:95}',
+  // The composer button rides the same trigger tokens as the host's own
+  // toolbar pills (permission / model selectors): a ghost pill in the muted
+  // secondary label color that only shows a container on hover, focus, or the
+  // selected state. Before this, a plain `color: inherit` + 12px read as a
+  // bare dark label floating between properly-styled siblings.
+  '.dco-ac-btn{height:28px;border-radius:24px;border:none;background:transparent;color:var(--dsw-alias-label-secondary,rgba(127,127,127,.85));cursor:pointer;display:inline-flex;align-items:center;gap:4px;padding:0 8px;font:inherit;font-size:13px;font-weight:500;line-height:20px;white-space:nowrap}',
+  // The pressed-trigger background must come AFTER hover (both two-class
+  // specificity) so selecting a role does not get washed out by hovering;
+  // the selected pill still darkens slightly on hover for feedback.
+  '.dco-ac-btn:hover{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12))}',
+  '.dco-ac-btn:focus-visible{outline:2px solid var(--dsw-alias-label-primary,currentColor);outline-offset:2px}',
+  '.dco-ac-btn.on:hover{filter:brightness(.96)}',
+  // While the popover is open, paint the trigger with the grey pressed tint so
+  // the open state is visible even before any role is selected (the `.on`
+  // blue tint still outranks it thanks to higher specificity).
+  '.dco-ac-btn[aria-expanded="true"]{background:var(--dsw-alias-interactive-bg-hover,rgba(127,127,127,.12))}',
+  '.dco-ac-btn.on{background:var(--dsw-alias-state-business-tertiary,#e4edfd);color:var(--dsw-alias-brand-primary,inherit)}',
+  // line-height:1 — the count badge is a 16px grid cell; without it, it
+  // inherits the button's 20px line-height and the 20px line box overflows the
+  // cell, pushing the digit ~2px below center.
+  '.dco-ac-count{box-sizing:border-box;line-height:1;min-width:16px;height:16px;padding:0 4px;border-radius:99px;background:var(--dsw-alias-brand-primary,#508cff);color:#fff;font-size:10px;font-weight:600;display:grid;place-items:center;flex:none}',
+  // box-sizing border-box: the host cascade does not reset it, so the old
+  // content-box width:264px actually painted a 290px silhouette that the
+  // anchor clamp (window.innerWidth - 272) did not account for.
+  '.dco-ac-pop{position:fixed;box-sizing:border-box;width:264px;transform:translateY(-100%);background:var(--dsw-alias-bg-layer-2,#fff);color:var(--dsw-alias-label-primary,inherit);border:1px solid var(--dsw-alias-border-l2,rgba(127,127,127,.4));border-radius:12px;box-shadow:0 12px 40px rgba(0,0,0,.25);padding:12px;display:flex;flex-direction:column;gap:8px;z-index:95}',
   '.dco-ac-pop h4{margin:0;font-size:12.5px;font-weight:600}',
   '.dco-ac-note{font-size:10.5px;opacity:.6;line-height:1.45}',
   '.dco-ac-list{display:flex;flex-direction:column;gap:2px;max-height:220px;overflow:auto}',
@@ -713,6 +733,12 @@ function AutoConsultControl({ sessionId, t }) {
   const root = useRef(null)
   const btn = useRef(null)
 
+  // Same silhouette the popover's CSS paints (width:264px + 8px gutter); kept
+  // in one place so the viewport clamp cannot drift from the declared width
+  // the way the content-box sizing bug let 290px slip past a 272px clamp.
+  const POPUP_W = 264
+  const popupId = `dco-ac-pop-${sessionId}`
+
   const adopt = useCallback((data) => {
     if (!isAutoConsultState(data)) throw new Error(t('acNotJson'))
     setState(data)
@@ -766,7 +792,7 @@ function AutoConsultControl({ sessionId, t }) {
   const toggleOpen = () => {
     if (!open && btn.current !== null && typeof window !== 'undefined') {
       const rect = btn.current.getBoundingClientRect()
-      const left = Math.max(8, Math.min(rect.left, window.innerWidth - 272))
+      const left = Math.max(8, Math.min(rect.left, window.innerWidth - (POPUP_W + 8)))
       setAnchor({ left, top: rect.top - 8 })
     }
     setOpen(!open)
@@ -811,12 +837,14 @@ function AutoConsultControl({ sessionId, t }) {
       type: 'button',
       title: t('acTooltip'),
       onClick: toggleOpen,
-      'aria-haspopup': 'true',
+      'aria-haspopup': 'dialog',
       'aria-expanded': open,
+      'aria-controls': open ? popupId : undefined,
       ref: btn,
     }, t('autoTitle'),
       enabledCount > 0 ? h('span', { className: 'dco-ac-count' }, String(enabledCount)) : null),
     open && h('div', {
+      id: popupId,
       className: 'dco-ac-pop',
       style: anchor === null ? { left: '8px', bottom: '48px' } : { left: `${anchor.left}px`, top: `${anchor.top}px` },
     },

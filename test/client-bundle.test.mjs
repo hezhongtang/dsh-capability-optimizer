@@ -206,3 +206,43 @@ test('apply() injects composer styles so the chat seat is not unstyled', () => {
   assert.ok(styles.some((el) => el.attributes['data-dco'] === ''),
     'ensureStyles must run from apply(), not only from the Settings section')
 })
+
+/**
+ * The composer button used to render as bare 12px near-black text (`color:
+ * inherit`) floating between the host's styled toolbar pills — read as a
+ * missing/broken control. It must ride the host trigger tokens (muted
+ * secondary label, 13px/500, 24px radius), and the popover must paint its
+ * declared 264px width (box-sizing content-box made it a 290px silhouette the
+ * anchor clamp did not budget for).
+ */
+test('composer auto-consult button matches the host toolbar trigger tokens', () => {
+  const { styles } = applyClient()
+  const css = styles.find((el) => el.attributes['data-dco'] === '')?.textContent ?? ''
+  assert.match(css, /\.dco-ac-btn\{height:28px;border-radius:24px;border:none;background:transparent;color:var\(--dsw-alias-label-secondary/)
+  assert.doesNotMatch(css, /\.dco-ac-btn\{[^}]*color:inherit/)
+  // a visible focus ring (outline beats a low-contrast border-token shadow)
+  assert.match(css, /\.dco-ac-btn:focus-visible\{outline:2px solid var\(--dsw-alias-label-primary/)
+  assert.match(css, /\.dco-ac-pop\{position:fixed;box-sizing:border-box;width:264px/)
+  // the count badge must not inherit the button's 20px line-height into its
+  // 16px grid cell, or the digit lands ~2px below center
+  assert.match(css, /\.dco-ac-count\{box-sizing:border-box;line-height:1;min-width:16px;height:16px/)
+  // the open state is visually signalled even with nothing selected
+  assert.match(css, /\.dco-ac-btn\[aria-expanded="true"\]\{background:var\(--dsw-alias-interactive-bg-hover/)
+  // `.on` must stay after `:hover` (both two-class specificity) so the
+  // selected pill is not washed out by hover, and `.on:hover` (three-class)
+  // still gives the selected state a hover cue.
+  const hoverAt = css.indexOf('.dco-ac-btn:hover')
+  const onAt = css.indexOf('.dco-ac-btn.on')
+  assert.ok(hoverAt !== -1 && onAt !== -1 && onAt > hoverAt, 'selected state must outrank the plain hover background')
+  assert.match(css, /\.dco-ac-btn\.on:hover\{filter:brightness/)
+})
+
+test('composer clamp and ARIA derive from one shared popup constant', () => {
+  const source = readFileSync(join(repoRoot, 'client', 'client.js'), 'utf8')
+  assert.match(source, /const POPUP_W = 264/)
+  assert.match(source, /window\.innerWidth - \(POPUP_W \+ 8\)/)
+  // the popover is a checkbox group, not a menu
+  assert.match(source, /'aria-haspopup': 'dialog'/)
+  assert.match(source, /'aria-controls': open \? popupId : undefined/)
+  assert.match(source, /id: popupId,/)
+})
