@@ -1,6 +1,6 @@
 {
   "name": "dsh-capability-optimizer",
-  "version": "0.6.0",
+  "version": "0.6.1",
   "description": "External-expert consultation for DeepSeek Harness: headlessly invokes Claude Code through explicit advisor / reviewer / designer / custom role contracts and returns structured reference answers for the agent to weigh. · DSH 外部专家咨询：通过明确的 advisor / reviewer / designer / 自定义角色合同 headless 调用 Claude Code，返回供 agent 权衡的结构化参考答案。",
   "keywords": [
     "dsh-plugin",
